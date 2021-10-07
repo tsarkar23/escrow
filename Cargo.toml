@@ -1,5 +1,5 @@
 [package]
-name = "solana-bpf-helloworld"
+name = "escrow"
 version = "0.0.1"
 description = "Example template program written in Rust"
 authors = ["Solana Maintainers <maintainers@solana.com>"]
