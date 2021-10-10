@@ -29,6 +29,24 @@ struct Info {
     state: u8,
 }
 
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+struct EscrowData {
+    xval: u64,
+    yval: u64,
+    a_pub_key: Pubkey,
+    b_pub_key: Pubkey,
+    // a_x_pub_key: Pubkey,
+    // a_y_pub_key: Pubkey,
+    // b_x_pub_key: Pubkey,
+    mint_x_pub_key: Pubkey,
+    mint_y_pub_key: Pubkey,
+    vault_x_pub_key: Pubkey,
+    vault_y_pub_key: Pubkey,
+    init_deposit_status: u64,
+    is_a_withdrawed: u8,
+    is_b_withdrawed: u8,
+}
+
 
 pub struct Processor;
 impl Processor {
@@ -157,39 +175,76 @@ impl Processor {
         msg!("D - Step 0");
         let account_info_iter = &mut accounts.iter(); 
         let escrow_info = next_account_info(account_info_iter)?; // mint  public address
-        let mint_x_info = next_account_info(account_info_iter)?; // mint  public address
-        let mint_y_info = next_account_info(account_info_iter)?; // mint  public address
-        let x_a_info = next_account_info(account_info_iter)?;
-        let vault_x_info = next_account_info(account_info_iter)?; // mint  public address
-        // let vault_y_info = next_account_info(account_info_iter)?; // mint  public address
-        let alice_info = next_account_info(account_info_iter)?; // payer_account, is it both public and private key? yeah
-        let bob_info = next_account_info(account_info_iter)?; // payer_account, is it both public and private key? yeah
+        let payer_token_info = next_account_info(account_info_iter)?;
+        let vault_info = next_account_info(account_info_iter)?; // mint  public address
+        let payer_info = next_account_info(account_info_iter)?; // payer_account, is it both public and private key? yeah
         let token_program_info = next_account_info(account_info_iter)?; // token_program_id
-        // let rent_info = next_account_info(account_info_iter)?; // solana.py from solana.sysvar import SYSVAR_RENT_PUBKEY
-        // let system_program_info = next_account_info(account_info_iter)?; // system program public key? public_key(1)?
-        // let escrow_program_info = next_account_info(account_info_iter)?; 
+        // Todo: Check if token_program_info is the "real" token program info
+        
+
+        let mut escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
+
+        if escrow_data.init_deposit_status >2 {            
+            msg!("Hey it is not the time!");
+            return Err(ProgramError::InvalidAccountData);
+        }
+
+
+        let mut amount = 66;   
+        let mut payer_seed_word:&[u8] = b"will_cahnge";
+
+        if escrow_data.init_deposit_status ==0 {    
+            if payer_info.key.as_ref() != escrow_data.a_pub_key.as_ref(){
+                msg!("Account has not initialized yet!");
+                return Err(ProgramError::InvalidAccountData);
+            }        
+        }
+
+        if escrow_data.init_deposit_status ==1 {    
+            if payer_info.key.as_ref() != escrow_data.a_pub_key.as_ref(){
+                msg!("Initiator ({}) needs to transfer! But this id want's to pay: {}", escrow_data.a_pub_key,payer_info.key);
+                return Err(ProgramError::InvalidAccountData);
+            }        
+            amount = escrow_data.xval;
+
+            payer_seed_word = b"vault_x14tintin";
+
+
+        }
+
+        if escrow_data.init_deposit_status ==2 {    
+            if payer_info.key.as_ref() != escrow_data.b_pub_key.as_ref(){
+                msg!("other side should transfer at this moment!");
+                return Err(ProgramError::InvalidAccountData);
+            }   
+            amount = escrow_data.yval;   
+
+            payer_seed_word = b"vault_y14tintin"
+            
+            
+        }
+
+
+        let vault_payer_seeds = &[
+                payer_seed_word,
+                escrow_data.a_pub_key.as_ref(),
+                escrow_data.b_pub_key.as_ref(),
+                escrow_data.mint_x_pub_key.as_ref(), // mint_x_info.key.as_ref(),
+                escrow_data.mint_y_pub_key.as_ref(), // mint_y_info.key.as_ref(),
+            ];
     
     
-        msg!("D -Step 1");
-    
-        let vault_x_seeds = &[
-            b"vault_x",
-            alice_info.key.as_ref(),
-            bob_info.key.as_ref(),
-            mint_x_info.key.as_ref(),
-            mint_y_info.key.as_ref(),
-        ];
     
         
     
         msg!("D - Step 2");
     
         let escrow_seeds = &[
-            b"escrow",
-            alice_info.key.as_ref(),
-            bob_info.key.as_ref(),
-            mint_x_info.key.as_ref(),
-            mint_y_info.key.as_ref(),
+            b"escrow14tintin",
+            escrow_data.a_pub_key.as_ref(),
+            escrow_data.b_pub_key.as_ref(),
+            escrow_data.mint_x_pub_key.as_ref(), // mint_x_info.key.as_ref(),
+            escrow_data.mint_y_pub_key.as_ref(), // mint_y_info.key.as_ref(),
         ];
 
         msg!("D - Step 3");
@@ -198,13 +253,15 @@ impl Processor {
     
         // deposit_token
     
-        let mut info = Info::try_from_slice(&escrow_info.data.borrow())?;
+    
+
+        // if escrow_data.init_deposit_status != 0 {
+        //     return Err(ProgramError::InvalidAccountData);
+        // }
 
 
         msg!("D - Step 4");
         // let args = Args:try_from_slice(_instruction_data)?;
-
-        let amount = info.xval;
 
         msg!("D - Step 5");
 
@@ -216,12 +273,12 @@ impl Processor {
         
         deposit_token(
             program_id,
-            alice_info,
+            payer_info,
             escrow_info,
-            vault_x_info,
-            x_a_info,
+            vault_info,
+            payer_token_info,
             token_program_info,
-            vault_x_seeds,
+            vault_payer_seeds,
             escrow_seeds,
             amount,
         )?;
@@ -230,9 +287,22 @@ impl Processor {
 
     
         
-        let info = Info{xval:info.xval,yval:info.yval,state:2};
+        let escrow_data = EscrowData{
+            xval:escrow_data.xval,
+            yval:escrow_data.yval,
+            a_pub_key: escrow_data.a_pub_key,
+            b_pub_key: escrow_data.b_pub_key,
+            mint_x_pub_key: escrow_data.mint_x_pub_key,
+            mint_y_pub_key: escrow_data.mint_y_pub_key,
+            vault_x_pub_key: escrow_data.vault_x_pub_key,
+            vault_y_pub_key: escrow_data.vault_y_pub_key,
+            init_deposit_status: escrow_data.init_deposit_status+1, //0: not initialized, 1: initialized but no one deposited, 2: alice deposited, 3:both deposited
+            is_a_withdrawed: 0,
+            is_b_withdrawed: 0, 
+        };
+
         msg!("D - Step 7");
-        info.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?;
+        escrow_data.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?;
         msg!("D - Step 8");
 
         Ok(())
@@ -252,8 +322,8 @@ impl Processor {
         amounts: [u64; 2],
         program_id: &Pubkey,
     ) -> ProgramResult {
+        // let mut escrow_info = Info::try_from_slice(&escrow_info.data.borrow())?;
         msg!("Step 0");
-
         let account_info_iter = &mut accounts.iter(); 
         let escrow_info = next_account_info(account_info_iter)?; // mint  public address
         let mint_x_info = next_account_info(account_info_iter)?; // mint  public address
@@ -267,42 +337,7 @@ impl Processor {
         let rent_info = next_account_info(account_info_iter)?; // solana.py from solana.sysvar import SYSVAR_RENT_PUBKEY
         let system_program_info = next_account_info(account_info_iter)?; // system program public key? public_key(1)?
         // let escrow_program_info = next_account_info(account_info_iter)?; 
-    
-    
         msg!("Step 1");
-    
-        let vault_x_seeds = &[
-            b"vault_x",
-            alice_info.key.as_ref(),
-            bob_info.key.as_ref(),
-            mint_x_info.key.as_ref(),
-            mint_y_info.key.as_ref(),
-        ];
-    
-        msg!("Step 2");
-    
-        let vault_y_seeds = &[
-            b"vault_y",
-            alice_info.key.as_ref(),
-            bob_info.key.as_ref(),
-            mint_x_info.key.as_ref(),
-            mint_y_info.key.as_ref(),
-        ];
-    
-    
-        msg!("Step 3");
-    
-        let escrow_seeds = &[
-            b"escrow",
-            alice_info.key.as_ref(),
-            bob_info.key.as_ref(),
-            mint_x_info.key.as_ref(),
-            mint_y_info.key.as_ref(),
-        ];
-        
-    
-        msg!("Step 7");
-    
     
         create_account(program_id, 
             &vault_x_info.clone(),
@@ -313,11 +348,12 @@ impl Processor {
             &rent_info.clone(),
             &system_program_info.clone(),
             &[
-                b"vault_x",
+                b"vault_x14tintin",
                 alice_info.key.as_ref(),
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
+                // escrow_info.key.as_ref(),
             ],
             165,
         )?;
@@ -333,11 +369,12 @@ impl Processor {
             &rent_info.clone(),
             &system_program_info.clone(),
             &[
-                b"vault_y",
+                b"vault_y14tintin",
                 alice_info.key.as_ref(),
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
+                // escrow_info.key.as_ref(),
             ],
             165,
         )?;
@@ -346,28 +383,51 @@ impl Processor {
 
         // make escrow account
 
-        create_escrow_account(program_id,
+        create_escrow_account(
+            program_id,
             &escrow_info.clone(),
             &payer_info.clone(),
             &rent_info.clone(),
             &system_program_info.clone(),
             &[
-                b"escrow",
+                b"escrow14tintin",
                 alice_info.key.as_ref(),
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
+                // escrow_info.key.as_ref(),
             ],
-            17,
+            218,
         )?;
 
         msg!("The escrow is created!");
 
 
          
-        let info = Info{xval:amounts[0],yval:amounts[1],state:1};
+        // let info = Info{xval:amounts[0],yval:amounts[1],state:1};
+        let mut escrow_data = EscrowData{
+            xval:amounts[0],
+            yval:amounts[1],
+            a_pub_key: *alice_info.key,
+            b_pub_key: *bob_info.key,
+            mint_x_pub_key: *mint_x_info.key,
+            mint_y_pub_key: *mint_y_info.key,
+            vault_x_pub_key: *vault_x_info.key,
+            vault_y_pub_key: *vault_y_info.key,
+            init_deposit_status: 1u64, //0: not initialized, 1: initialized but no one deposited, 2: alice deposited, 3:both deposited
+            is_a_withdrawed: 0,
+            is_b_withdrawed: 0, 
+        };
+
+        // let info_data = Info{
+        //     xval:2,
+        //     yval: 3,
+        //     state: 1,
+        // };
         msg!("Step 14");
-        info.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?;
+        msg!("escrow_data: {}, {}, {}, {}, {}",escrow_data.xval, escrow_data.a_pub_key, escrow_data.mint_x_pub_key, escrow_data.vault_x_pub_key,escrow_data.init_deposit_status);
+        msg!("escrow pubkey: {}", escrow_info.key);
+        escrow_data.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?;
         msg!("Step 15");
 
         Ok(())
@@ -532,6 +592,7 @@ fn create_account<'a>(
         vault_seed[2],
         vault_seed[3],
         vault_seed[4],
+        // vault_seed[5],
         &[bump_seed],
     ];
     solana_program::program::invoke_signed(
@@ -611,6 +672,7 @@ fn create_escrow_account<'a>(
         vault_seed[2],
         vault_seed[3],
         vault_seed[4],
+        // vault_seed[5],
         &[bump_seed],
     ];
     msg!("Step e");

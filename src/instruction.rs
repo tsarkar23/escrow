@@ -20,6 +20,12 @@ pub enum EscrowInstruction {
     /// 5. `[]` The token program
     InitEscrow {
         amounts: [u64; 2],
+        // a_pub_key: Pubkey,
+        // b_pub_key: Pubkey,
+        // a_x_pub_key: Pubkey,
+        // a_y_pub_key: Pubkey,
+        // b_x_pub_key: Pubkey,
+        // b_y_pub_key: Pubkey
     },
     Deposit,
     Withdrawal,
