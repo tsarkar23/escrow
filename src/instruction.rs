@@ -19,16 +19,8 @@ pub enum EscrowInstruction {
     /// 4. `[]` The rent sysvar
     /// 5. `[]` The token program
     InitEscrow {
-        /// The amount party A expects to receive of token Y
         amounts: [u64; 2],
     },
-
-    Commit {},
+    Deposit,
+    Withdrawal,
 }
-
-// impl EscrowInstruction {
-//     /// Unpacks a byte buffer into a [EscrowInstruction](enum.EscrowInstruction.html).
-//     pub fn unpack(input: &[u8]) -> Result<Self, ProgramError> {
-//         return EscrowInstruction::try_from_slice(input);
-//     }
-// }
