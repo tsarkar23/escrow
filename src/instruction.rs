@@ -1,5 +1,3 @@
-use solana_program::program_error::ProgramError;
-use std::convert::TryInto;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -19,13 +17,7 @@ pub enum EscrowInstruction {
     /// 4. `[]` The rent sysvar
     /// 5. `[]` The token program
     InitEscrow {
-        amounts: [u64; 2],
-        // a_pub_key: Pubkey,
-        // b_pub_key: Pubkey,
-        // a_x_pub_key: Pubkey,
-        // a_y_pub_key: Pubkey,
-        // b_x_pub_key: Pubkey,
-        // b_y_pub_key: Pubkey
+        amounts: [u64; 3],
     },
     Deposit,
     Withdrawal,
