@@ -20,5 +20,7 @@ pub enum EscrowInstruction {
         amounts: [u64; 3],
     },
     Deposit,
-    Withdrawal,
+    Withdrawal {
+        amounts: [u64; 1],
+    },
 }

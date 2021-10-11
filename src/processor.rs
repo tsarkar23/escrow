@@ -11,13 +11,11 @@ use solana_program::{
 use std::convert::TryInto;
 
 use crate::instruction::EscrowInstruction;
-
 /// Define the type of state stored in accounts
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
 struct EscrowData {
     xval: u64,
     yval: u64,
-    pass: [u8; 8],
     a_pub_key: Pubkey,
     b_pub_key: Pubkey,
     mint_x_pub_key: Pubkey,
@@ -47,14 +45,17 @@ impl Processor {
                 msg!("Instruction: Deposit");
                 Self::process_deposit(accounts)
             }
-            EscrowInstruction::Withdrawal => {
+            EscrowInstruction::Withdrawal {amounts}=> {
                 msg!("Instruction: Withdrawal");
-                Self::process_withdrawal(accounts, program_id)
+                Self::process_withdrawal(accounts, amounts, program_id)
             }
         }
     }
 
-    pub fn process_withdrawal(accounts: &[AccountInfo], program_id: &Pubkey) -> ProgramResult {
+    pub fn process_withdrawal(
+        accounts: &[AccountInfo],
+        amounts: [u64; 1],
+        program_id: &Pubkey) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let escrow_info = next_account_info(account_info_iter)?; // mint  public address
         let taker_token_info = next_account_info(account_info_iter)?;
@@ -88,9 +89,10 @@ impl Processor {
             return Err(ProgramError::InvalidAccountData);
         };
         msg!("process_withdrawal 4");
+        let tmp = amounts[0].to_le_bytes();
         let escrow_seeds = &[
             b"escrow",
-            escrow_data.pass.as_ref(),
+            tmp.as_ref(),
             escrow_data.a_pub_key.as_ref(),
             escrow_data.b_pub_key.as_ref(),
             escrow_data.mint_x_pub_key.as_ref(),
@@ -112,7 +114,6 @@ impl Processor {
         let escrow_data = EscrowData {
             xval: escrow_data.xval,
             yval: escrow_data.yval,
-            pass: escrow_data.pass,
             a_pub_key: escrow_data.a_pub_key,
             b_pub_key: escrow_data.b_pub_key,
             mint_x_pub_key: escrow_data.mint_x_pub_key,
@@ -139,7 +140,13 @@ impl Processor {
         Ok(())
     }
 
-    pub fn process_deposit(accounts: &[AccountInfo]) -> ProgramResult {
+
+
+
+
+
+    pub fn process_deposit(
+        accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let escrow_info = next_account_info(account_info_iter)?; // mint  public address
         let payer_token_info = next_account_info(account_info_iter)?;
@@ -148,8 +155,9 @@ impl Processor {
         let token_program_info = next_account_info(account_info_iter)?; // token_program_id
 
         // Todo: Check if token_program_info is the "real" token program info
-        msg!("process_deposit 1");
+        msg!("process_deposit 0");
         let escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
+        msg!("process_deposit 1");
         let amount;
         msg!("process_deposit 2");
         if escrow_data.init_deposit_status == 0 {
@@ -191,7 +199,6 @@ impl Processor {
         let escrow_data = EscrowData {
             xval: escrow_data.xval,
             yval: escrow_data.yval,
-            pass: escrow_data.pass,
             a_pub_key: escrow_data.a_pub_key,
             b_pub_key: escrow_data.b_pub_key,
             mint_x_pub_key: escrow_data.mint_x_pub_key,
@@ -285,13 +292,12 @@ impl Processor {
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
             ],
-            282,
+            226,
         )?;
         msg!("init: 4");
         let escrow_data = EscrowData {
             xval: amounts[0],
             yval: amounts[1],
-            pass: amounts[2].to_le_bytes(),
             a_pub_key: *alice_info.key,
             b_pub_key: *bob_info.key,
             mint_x_pub_key: *mint_x_info.key,
@@ -302,8 +308,9 @@ impl Processor {
             is_a_withdrawed: 0,
             is_b_withdrawed: 0,
         };
-
+        msg!("init: 5");
         escrow_data.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?;
+        msg!("init: 6");
         Ok(())
     }
 }
