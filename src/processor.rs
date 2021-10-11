@@ -347,6 +347,7 @@ fn withdraw_token<'a>(
         escrow_seed[2],
         escrow_seed[3],
         escrow_seed[4],
+        vault_seed[5],
         &[escrow_bump_seed],
     ];
 
@@ -398,6 +399,7 @@ fn create_account<'a>(
         vault_seed[2],
         vault_seed[3],
         vault_seed[4],
+        vault_seed[5],
         &[bump_seed],
     ];
     solana_program::program::invoke_signed(
@@ -455,6 +457,7 @@ fn create_escrow_account<'a>(
         vault_seed[2],
         vault_seed[3],
         vault_seed[4],
+        vault_seed[5],
         &[bump_seed],
     ];
     solana_program::program::invoke_signed(
