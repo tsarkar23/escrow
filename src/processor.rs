@@ -9,7 +9,7 @@ use solana_program::{
     sysvar::{rent::Rent, Sysvar},
 };
 use std::convert::TryInto;
-
+use std::mem;
 use crate::instruction::EscrowInstruction;
 /// Define the type of state stored in accounts
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
@@ -155,7 +155,9 @@ impl Processor {
         let token_program_info = next_account_info(account_info_iter)?; // token_program_id
 
         // Todo: Check if token_program_info is the "real" token program info
-        msg!("process_deposit 0");
+        msg!("process_deposit started here!");
+        let escrow_size:u64 = (mem::size_of::<EscrowData>()).try_into().unwrap();
+        msg!("process_deposit 1: {:?}", escrow_size);
         let escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
         msg!("process_deposit 1");
         let amount;
@@ -278,6 +280,8 @@ impl Processor {
             165,
         )?;
         msg!("init: 3");
+        let escrow_size:u64 = (mem::size_of::<EscrowData>()).try_into().unwrap();
+        msg!("init: 3 {:?}", escrow_size);
         create_escrow_account(
             program_id,
             &escrow_info.clone(),
@@ -292,7 +296,7 @@ impl Processor {
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
             ],
-            218,
+            218, // escrow_size
         )?;
         msg!("init: 4");
         let escrow_data = EscrowData {

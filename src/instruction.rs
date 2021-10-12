@@ -1,13 +1,10 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-// use crate::error::EscrowError::InvalidInstruction;
 
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
 pub enum EscrowInstruction {
     /// Starts the trade by creating and populating an escrow account and transferring ownership of the given temp token account to the PDA
-    ///
-    ///
     /// Accounts expected:
     ///
     /// 0. `[signer]` The account of the person initializing the escrow
@@ -17,10 +14,10 @@ pub enum EscrowInstruction {
     /// 4. `[]` The rent sysvar
     /// 5. `[]` The token program
     InitEscrow {
-        amounts: [u64; 3],
+        amounts: [u64; 3], //amounts[0]:x_val, amounts[1]:y_val, amounts[2]:pass
     },
     Deposit,
     Withdrawal {
-        amounts: [u64; 1],
+        pass: [u64; 1],
     },
 }
