@@ -45,16 +45,16 @@ impl Processor {
                 msg!("Instruction: Deposit");
                 Self::process_deposit(accounts)
             }
-            EscrowInstruction::Withdrawal {amounts}=> {
+            EscrowInstruction::Withdrawal {pass}=> {
                 msg!("Instruction: Withdrawal");
-                Self::process_withdrawal(accounts, amounts, program_id)
+                Self::process_withdrawal(accounts, pass, program_id)
             }
         }
     }
 
     pub fn process_withdrawal(
         accounts: &[AccountInfo],
-        amounts: [u64; 1],
+        pass: [u64; 1],
         program_id: &Pubkey) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let escrow_info = next_account_info(account_info_iter)?; // mint  public address
@@ -89,7 +89,7 @@ impl Processor {
             return Err(ProgramError::InvalidAccountData);
         };
         msg!("process_withdrawal 4");
-        let tmp = amounts[0].to_le_bytes();
+        let tmp = pass[0].to_le_bytes();
         let escrow_seeds = &[
             b"escrow",
             tmp.as_ref(),
@@ -292,7 +292,7 @@ impl Processor {
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
             ],
-            226,
+            218,
         )?;
         msg!("init: 4");
         let escrow_data = EscrowData {
@@ -309,7 +309,7 @@ impl Processor {
             is_b_withdrawed: 0,
         };
         msg!("init: 5");
-        escrow_data.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?;
+        escrow_data.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?; //write escrow_data into escrow_info.data
         msg!("init: 6");
         Ok(())
     }
