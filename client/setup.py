@@ -61,7 +61,7 @@ X_mint_account_address.mint_to(alice_X_token_account,payer_loaded_account,1000)
 Y_mint_account_address.mint_to(bob_Y_token_account,payer_loaded_account,100)
 
 # escrow meta-data account
-deployed_program_key = glob.glob("../dist/program/*.json")[0]
+deployed_program_key = glob.glob("dist/program/*.json")[0]
 deployed_program_key_account = solana.keypair.Keypair(json.load(open(deployed_program_key))[:32])
 program_id = deployed_program_key_account.public_key
 
