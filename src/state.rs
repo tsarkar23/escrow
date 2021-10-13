@@ -1,9 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::pubkey::Pubkey;
 
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug)]
 pub enum EscrowState {
-    Unintialized,
+    Uninitialized,
     Initialized,
     DepositAlice,
     DepositBob,
