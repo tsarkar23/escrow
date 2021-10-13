@@ -65,7 +65,7 @@ impl Processor {
         // msg!("alice pub key {:?}", alice_info.key.as_ref());
         // return Err(ProgramError::InvalidAccountData);
         msg!("init: 1");
-        create_account(
+        create_vault(
             program_id,
             &vault_x_info.clone(),
             &mint_x_info.clone(),
@@ -84,8 +84,23 @@ impl Processor {
             ],
             165,
         )?;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
         msg!("init: 2");
-        create_account(
+        create_vault(
             program_id,
             &vault_y_info.clone(),
             &mint_y_info.clone(),
@@ -228,7 +243,7 @@ impl Processor {
         msg!("process_deposit started here!");
         let escrow_size:u64 = (mem::size_of::<EscrowData>()).try_into().unwrap();
         msg!("process_deposit 1: {:?}", escrow_size);
-        let escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
+        let mut escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
         msg!("process_deposit 1");
         let amount;
         msg!("process_deposit 2");
@@ -280,21 +295,7 @@ impl Processor {
         )?;
         msg!("deposit_token 3");
 
-
-        msg!("process_deposit 5");
-        let escrow_data = EscrowData {
-            xval: escrow_data.xval,
-            yval: escrow_data.yval,
-            a_pub_key: escrow_data.a_pub_key,
-            b_pub_key: escrow_data.b_pub_key,
-            mint_x_pub_key: escrow_data.mint_x_pub_key,
-            mint_y_pub_key: escrow_data.mint_y_pub_key,
-            vault_x_pub_key: escrow_data.vault_x_pub_key,
-            vault_y_pub_key: escrow_data.vault_y_pub_key,
-            init_deposit_status: escrow_data.init_deposit_status + 1, //0: not initialized, 1: initialized but no one deposited, 2: alice deposited, 3:both deposited
-            is_a_withdrawed: 0,
-            is_b_withdrawed: 0,
-        };
+        escrow_data.init_deposit_status = escrow_data.init_deposit_status + 1;
         msg!("process_deposit 6");
         escrow_data.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?;
         Ok(())
@@ -312,7 +313,7 @@ impl Processor {
         let taker_info = next_account_info(account_info_iter)?;
         let token_program_info = next_account_info(account_info_iter)?; // token_program_id
         msg!("process_withdrawal 1");
-        let escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
+        let mut escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
         
         let amount;
         msg!("process_withdrawal 2");
@@ -383,30 +384,20 @@ impl Processor {
         
 
 
-
-
         msg!("process_withdrawal 6");
-        let escrow_data = EscrowData {
-            xval: escrow_data.xval,
-            yval: escrow_data.yval,
-            a_pub_key: escrow_data.a_pub_key,
-            b_pub_key: escrow_data.b_pub_key,
-            mint_x_pub_key: escrow_data.mint_x_pub_key,
-            mint_y_pub_key: escrow_data.mint_y_pub_key,
-            vault_x_pub_key: escrow_data.vault_x_pub_key,
-            vault_y_pub_key: escrow_data.vault_y_pub_key,
-            init_deposit_status: escrow_data.init_deposit_status, //0: not initialized, 1: initialized but no one deposited, 2: alice deposited, 3:both deposited
-            is_a_withdrawed: if taker_info.key.as_ref() == escrow_data.a_pub_key.as_ref() {
-                1
-            } else {
-                escrow_data.is_a_withdrawed
-            },
-            is_b_withdrawed: if taker_info.key.as_ref() == escrow_data.b_pub_key.as_ref() {
-                1
-            } else {
-                escrow_data.is_b_withdrawed
-            },
+
+        escrow_data.is_a_withdrawed = if taker_info.key.as_ref() == escrow_data.a_pub_key.as_ref() {
+            1
+        } else {
+            escrow_data.is_a_withdrawed
         };
+
+        escrow_data.is_b_withdrawed = if taker_info.key.as_ref() == escrow_data.b_pub_key.as_ref() {
+            1
+        } else {
+            escrow_data.is_b_withdrawed
+        };
+
         msg!("process_withdrawal 7");
         escrow_data.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?;
         msg!("process_withdrawal 8");
@@ -414,11 +405,24 @@ impl Processor {
 
         Ok(())
     }
-    
-    
 }
 
-fn create_account<'a>(
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+fn create_vault<'a>(
     program_id: &Pubkey,
     vault_info: &AccountInfo<'a>,
     mint_info: &AccountInfo<'a>,
