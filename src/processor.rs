@@ -48,7 +48,7 @@ impl Processor {
         accounts: &[AccountInfo],
         size_x: u64,
         size_y: u64,
-        pass: u64,
+        pass: [u8; 8],
         program_id: &Pubkey,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
@@ -72,7 +72,7 @@ impl Processor {
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
-                &pass.to_le_bytes(),
+                pass.as_ref(), //.to_le_bytes(),
             ];
             let rent = &Rent::from_account_info(rent_info)?;
             let required_lamports = rent
@@ -86,7 +86,7 @@ impl Processor {
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
-                &pass.to_le_bytes(),
+                pass.as_ref(),
                 &[bump],
             ];
             solana_program::program::invoke_signed(
@@ -112,7 +112,7 @@ impl Processor {
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
-                &pass.to_le_bytes(),
+                pass.as_ref(), // .to_le_bytes(),
             ];
             let (_, bump) = Pubkey::find_program_address(escrow_seeds, program_id);
             bump
@@ -156,7 +156,7 @@ impl Processor {
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
-                &pass.to_le_bytes(),
+                pass.as_ref(), //.to_le_bytes(),
             ];
             let (_, bump) = Pubkey::find_program_address(seeds, program_id);
             bump
@@ -200,7 +200,7 @@ impl Processor {
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
                 mint_y_info.key.as_ref(),
-                &pass.to_le_bytes(),
+                pass.as_ref(),
             ];
             let (_, bump) = Pubkey::find_program_address(seeds, program_id);
             bump
@@ -230,7 +230,7 @@ impl Processor {
 
     pub fn process_deposit(
         accounts: &[AccountInfo],
-        pass: u64,
+        pass: [u8;8],
         program_id: &Pubkey,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
@@ -307,7 +307,7 @@ impl Processor {
             escrow_data.pubkey_bob.as_ref(),
             escrow_data.pubkey_mint_x.as_ref(),
             escrow_data.pubkey_mint_y.as_ref(),
-            &pass.to_le_bytes(),
+            pass.as_ref(), // .to_le_bytes(),
             &[bump_seed],
         ];
         let vault_pubkey = Pubkey::create_program_address(seeds, program_id)?;
@@ -322,7 +322,7 @@ impl Processor {
             escrow_data.pubkey_bob.as_ref(),
             escrow_data.pubkey_mint_x.as_ref(),
             escrow_data.pubkey_mint_y.as_ref(),
-            &pass.to_le_bytes(),
+            pass.as_ref(), // .to_le_bytes(),
             &[escrow_data.escrow_bump],
         ];
         let escrow_key = Pubkey::create_program_address(escrow_seeds, program_id)?;
@@ -353,7 +353,7 @@ impl Processor {
 
     pub fn process_withdrawal(
         accounts: &[AccountInfo],
-        pass: u64,
+        pass: [u8; 8],
         program_id: &Pubkey,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
@@ -452,7 +452,7 @@ impl Processor {
             escrow_data.pubkey_bob.as_ref(),
             escrow_data.pubkey_mint_x.as_ref(),
             escrow_data.pubkey_mint_y.as_ref(),
-            &pass.to_le_bytes(),
+            pass.as_ref(),
             &[bump_seed],
         ];
         let vault_pubkey = Pubkey::create_program_address(vault_seeds, program_id)?;
@@ -468,7 +468,7 @@ impl Processor {
             escrow_data.pubkey_bob.as_ref(),
             escrow_data.pubkey_mint_x.as_ref(),
             escrow_data.pubkey_mint_y.as_ref(),
-            &pass.to_le_bytes(),
+            pass.as_ref(),
             &[escrow_data.escrow_bump],
         ];
 
@@ -514,7 +514,7 @@ fn create_vault<'a>(
     token_program_info: &AccountInfo<'a>,
     rent_info: &AccountInfo<'a>,
     system_program_info: &AccountInfo<'a>,
-    pass: u64,
+    pass: [u8; 8],
     vault_seed: &[u8],
 ) -> Result<u8, ProgramError> {
     let space = Account::LEN;
@@ -529,7 +529,7 @@ fn create_vault<'a>(
         bob_info.key.as_ref(),
         mint_x_info.key.as_ref(),
         mint_y_info.key.as_ref(),
-        &pass.to_le_bytes(),
+        pass.as_ref(),
     ];
 
     let (_, bump_seed) = Pubkey::find_program_address(seeds, program_id);
@@ -539,7 +539,7 @@ fn create_vault<'a>(
         bob_info.key.as_ref(),
         mint_x_info.key.as_ref(),
         mint_y_info.key.as_ref(),
-        &pass.to_le_bytes(),
+        pass.as_ref(),
         &[bump_seed],
     ];
     msg!("creeat_vault 1");
@@ -559,6 +559,6 @@ fn create_vault<'a>(
         ],
         &[seeds],
     )?;
-    msg!("creeat_vault 2");
+    msg!("create_vault 2");
     Ok(bump_seed)
 }
