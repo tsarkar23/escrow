@@ -107,22 +107,89 @@ impl Processor {
         msg!("init: 3");
         let escrow_size:u64 = (mem::size_of::<EscrowData>()).try_into().unwrap();
         msg!("init: 3 {:?}", escrow_size);
-        create_escrow_account(
-            program_id,
-            &escrow_info.clone(),
-            &payer_info.clone(),
-            &rent_info.clone(),
-            &system_program_info.clone(),
+
+
+
+
+        // create_escrow_account(
+        //     program_id,
+        //     &escrow_info.clone(),
+        //     &payer_info.clone(),
+        //     &rent_info.clone(),
+        //     &system_program_info.clone(),
+        //     &[
+        //         b"escrow",
+        //         pass.to_le_bytes().as_ref(),
+        //         alice_info.key.as_ref(),
+        //         bob_info.key.as_ref(),
+        //         mint_x_info.key.as_ref(),
+        //         mint_y_info.key.as_ref(),
+        //     ],
+        //     218, // escrow_size
+        // )?;
+        let tmp = pass.to_le_bytes();
+        let escrow_seed = [
+            b"escrow",
+            tmp.as_ref(),
+            alice_info.key.as_ref(),
+            bob_info.key.as_ref(),
+            mint_x_info.key.as_ref(),
+            mint_y_info.key.as_ref(),
+        ];
+        let escrow_space = 218;
+        let rent = &Rent::from_account_info(rent_info)?;
+        let required_lamports = rent
+            .minimum_balance(escrow_space.try_into().unwrap())
+            .max(1)
+            .saturating_sub(escrow_info.lamports());
+        let (_, bump_seed) = Pubkey::find_program_address(&escrow_seed, program_id);
+        let seed = &[
+            escrow_seed[0],
+            escrow_seed[1],
+            escrow_seed[2],
+            escrow_seed[3],
+            escrow_seed[4],
+            escrow_seed[5],
+            &[bump_seed],
+        ];
+        solana_program::program::invoke_signed(
+            &system_instruction::create_account(
+                payer_info.key,    //from_pubkey
+                escrow_info.key,   //to_pubkey
+                required_lamports, //lamports
+                escrow_space,             //space
+                program_id,
+            ),
             &[
-                b"escrow",
-                pass.to_le_bytes().as_ref(),
-                alice_info.key.as_ref(),
-                bob_info.key.as_ref(),
-                mint_x_info.key.as_ref(),
-                mint_y_info.key.as_ref(),
+                payer_info.clone(),
+                escrow_info.clone(),
+                system_program_info.clone(),
             ],
-            218, // escrow_size
+            &[seed],
         )?;
+
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         msg!("init: 4");
         let escrow_data = EscrowData {
@@ -417,45 +484,46 @@ fn create_account<'a>(
     Ok(())
 }
 
-fn create_escrow_account<'a>(
-    program_id: &Pubkey,
-    escrow_info: &AccountInfo<'a>,
-    payer_info: &AccountInfo<'a>,
-    rent_info: &AccountInfo<'a>,
-    system_program_info: &AccountInfo<'a>,
-    escrow_seed: &[&[u8]],
-    space: u64,
-) -> ProgramResult {
-    let rent = &Rent::from_account_info(rent_info)?;
+// fn create_escrow_account<'a>(
+//     program_id: &Pubkey,
+//     escrow_info: &AccountInfo<'a>,
+//     payer_info: &AccountInfo<'a>,
+//     rent_info: &AccountInfo<'a>,
+//     system_program_info: &AccountInfo<'a>,
+//     escrow_seed: &[&[u8]],
+//     space: u64,
+// ) -> ProgramResult {
 
-    let required_lamports = rent
-        .minimum_balance(space.try_into().unwrap())
-        .max(1)
-        .saturating_sub(escrow_info.lamports());
-    let (_, bump_seed) = Pubkey::find_program_address(escrow_seed, program_id);
-    let seed = &[
-        escrow_seed[0],
-        escrow_seed[1],
-        escrow_seed[2],
-        escrow_seed[3],
-        escrow_seed[4],
-        escrow_seed[5],
-        &[bump_seed],
-    ];
-    solana_program::program::invoke_signed(
-        &system_instruction::create_account(
-            payer_info.key,    //from_pubkey
-            escrow_info.key,   //to_pubkey
-            required_lamports, //lamports
-            space,             //space
-            program_id,
-        ),
-        &[
-            payer_info.clone(),
-            escrow_info.clone(),
-            system_program_info.clone(),
-        ],
-        &[seed],
-    )?;
-    Ok(())
-}
+//     let rent = &Rent::from_account_info(rent_info)?;
+//     let required_lamports = rent
+//         .minimum_balance(space.try_into().unwrap())
+//         .max(1)
+//         .saturating_sub(escrow_info.lamports());
+//     let (_, bump_seed) = Pubkey::find_program_address(escrow_seed, program_id);
+//     let seed = &[
+//         escrow_seed[0],
+//         escrow_seed[1],
+//         escrow_seed[2],
+//         escrow_seed[3],
+//         escrow_seed[4],
+//         escrow_seed[5],
+//         &[bump_seed],
+//     ];
+//     solana_program::program::invoke_signed(
+//         &system_instruction::create_account(
+//             payer_info.key,    //from_pubkey
+//             escrow_info.key,   //to_pubkey
+//             required_lamports, //lamports
+//             space,             //space
+//             program_id,
+//         ),
+//         &[
+//             payer_info.clone(),
+//             escrow_info.clone(),
+//             system_program_info.clone(),
+//         ],
+//         &[seed],
+//     )?;
+//     Ok(())
+// }
+
