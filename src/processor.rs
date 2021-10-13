@@ -11,21 +11,7 @@ use solana_program::{
 use std::convert::TryInto;
 use std::mem;
 use crate::instruction::EscrowInstruction;
-/// Define the type of state stored in accounts
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
-struct EscrowData {
-    xval: u64,
-    yval: u64,
-    a_pub_key: Pubkey,
-    b_pub_key: Pubkey,
-    mint_x_pub_key: Pubkey,
-    mint_y_pub_key: Pubkey,
-    vault_x_pub_key: Pubkey,
-    vault_y_pub_key: Pubkey,
-    init_deposit_status: u64,
-    is_a_withdrawed: u8,
-    is_b_withdrawed: u8,
-}
+use crate::state::EscrowData;
 
 pub struct Processor;
 impl Processor {
@@ -37,13 +23,13 @@ impl Processor {
         let instruction = EscrowInstruction::try_from_slice(instruction_data)?;
 
         match instruction {
-            EscrowInstruction::InitEscrow { amounts } => {
+            EscrowInstruction::InitEscrow { amount_x, amount_y, pass } => {
                 msg!("Instruction: InitEscrow");
-                Self::process_init_escrow(accounts, amounts, program_id)
+                Self::process_init_escrow(accounts, amount_x, amount_y, pass, program_id)
             }
-            EscrowInstruction::Deposit => {
+            EscrowInstruction::Deposit {pass}=> {
                 msg!("Instruction: Deposit");
-                Self::process_deposit(accounts)
+                Self::process_deposit(accounts, pass)
             }
             EscrowInstruction::Withdrawal {pass}=> {
                 msg!("Instruction: Withdrawal");
@@ -54,7 +40,7 @@ impl Processor {
 
     pub fn process_withdrawal(
         accounts: &[AccountInfo],
-        pass: [u64; 1],
+        pass: u64,
         program_id: &Pubkey) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let escrow_info = next_account_info(account_info_iter)?; // mint  public address
@@ -89,7 +75,7 @@ impl Processor {
             return Err(ProgramError::InvalidAccountData);
         };
         msg!("process_withdrawal 4");
-        let tmp = pass[0].to_le_bytes();
+        let tmp = pass.to_le_bytes();
         let escrow_seeds = &[
             b"escrow",
             tmp.as_ref(),
@@ -146,7 +132,8 @@ impl Processor {
 
 
     pub fn process_deposit(
-        accounts: &[AccountInfo]) -> ProgramResult {
+        accounts: &[AccountInfo],
+        pass: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let escrow_info = next_account_info(account_info_iter)?; // mint  public address
         let payer_token_info = next_account_info(account_info_iter)?;
@@ -218,7 +205,9 @@ impl Processor {
 
     pub fn process_init_escrow(
         accounts: &[AccountInfo],
-        amounts: [u64; 3],
+        amount_x: u64,
+        amount_y: u64,
+        pass: u64,
         program_id: &Pubkey,
     ) -> ProgramResult {
         msg!("process_init_escrow");
@@ -235,8 +224,8 @@ impl Processor {
         let rent_info = next_account_info(account_info_iter)?; // solana.py from solana.sysvar import SYSVAR_RENT_PUBKEY
         let system_program_info = next_account_info(account_info_iter)?; // system program public key? public_key(1)?
 
-        msg!("password {}", amounts[2]);
-        msg!("password {:?}", amounts[2].to_le_bytes().as_ref());
+        msg!("password {}", pass);
+        msg!("password {:?}", pass.to_le_bytes().as_ref());
         msg!("alice pub key {:?}", alice_info.key.as_ref());
         // return Err(ProgramError::InvalidAccountData);
         msg!("init: 1");
@@ -251,7 +240,7 @@ impl Processor {
             &system_program_info.clone(),
             &[
                 b"vault_x",
-                amounts[2].to_le_bytes().as_ref(),
+                pass.to_le_bytes().as_ref(),
                 alice_info.key.as_ref(),
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
@@ -271,7 +260,7 @@ impl Processor {
             &system_program_info.clone(),
             &[
                 b"vault_y",
-                amounts[2].to_le_bytes().as_ref(),
+                pass.to_le_bytes().as_ref(),
                 alice_info.key.as_ref(),
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
@@ -290,7 +279,7 @@ impl Processor {
             &system_program_info.clone(),
             &[
                 b"escrow",
-                amounts[2].to_le_bytes().as_ref(),
+                pass.to_le_bytes().as_ref(),
                 alice_info.key.as_ref(),
                 bob_info.key.as_ref(),
                 mint_x_info.key.as_ref(),
@@ -300,8 +289,8 @@ impl Processor {
         )?;
         msg!("init: 4");
         let escrow_data = EscrowData {
-            xval: amounts[0],
-            yval: amounts[1],
+            xval: amount_x,
+            yval: amount_y,
             a_pub_key: *alice_info.key,
             b_pub_key: *bob_info.key,
             mint_x_pub_key: *mint_x_info.key,

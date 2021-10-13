@@ -1,15 +1,18 @@
-/// Define the type of state stored in accounts
+use solana_program::{
+    pubkey::Pubkey,
+};
+use borsh::{BorshDeserialize, BorshSerialize};
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
-struct EscrowData {
-    xval: u64,
-    yval: u64,
-    a_pub_key: Pubkey,
-    b_pub_key: Pubkey,
-    mint_x_pub_key: Pubkey,
-    mint_y_pub_key: Pubkey,
-    vault_x_pub_key: Pubkey,
-    vault_y_pub_key: Pubkey,
-    init_deposit_status: u64,
-    is_a_withdrawed: u8,
-    is_b_withdrawed: u8,
+pub struct EscrowData {
+    pub xval: u64,
+    pub yval: u64,
+    pub a_pub_key: Pubkey,
+    pub b_pub_key: Pubkey,
+    pub mint_x_pub_key: Pubkey,
+    pub mint_y_pub_key: Pubkey,
+    pub vault_x_pub_key: Pubkey,
+    pub vault_y_pub_key: Pubkey,
+    pub init_deposit_status: u64,
+    pub is_a_withdrawed: u8,
+    pub is_b_withdrawed: u8,
 }
