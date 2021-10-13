@@ -48,7 +48,7 @@ impl Processor {
         accounts: &[AccountInfo],
         size_x: u64,
         size_y: u64,
-        pass: [u8; 8],
+        pass: [u8; 32],
         program_id: &Pubkey,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
@@ -230,7 +230,7 @@ impl Processor {
 
     pub fn process_deposit(
         accounts: &[AccountInfo],
-        pass: [u8;8],
+        pass: [u8;32],
         program_id: &Pubkey,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
@@ -353,7 +353,7 @@ impl Processor {
 
     pub fn process_withdrawal(
         accounts: &[AccountInfo],
-        pass: [u8; 8],
+        pass: [u8; 32],
         program_id: &Pubkey,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
@@ -514,7 +514,7 @@ fn create_vault<'a>(
     token_program_info: &AccountInfo<'a>,
     rent_info: &AccountInfo<'a>,
     system_program_info: &AccountInfo<'a>,
-    pass: [u8; 8],
+    pass: [u8; 32],
     vault_seed: &[u8],
 ) -> Result<u8, ProgramError> {
     let space = Account::LEN;

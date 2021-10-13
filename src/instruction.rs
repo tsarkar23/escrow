@@ -15,12 +15,12 @@ pub enum EscrowInstruction {
     InitEscrow {
         amount_x: u64, //amounts[0]:x_val, amounts[1]:y_val, amounts[2]:pass
         amount_y: u64,
-        pass: [u8; 8],
+        pass: [u8; 32],
     },
     Deposit{
-        pass: [u8; 8],
+        pass: [u8; 32],
     },
     Withdrawal {
-        pass: [u8; 8],
+        pass: [u8; 32],
     },
 }
