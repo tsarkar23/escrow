@@ -276,7 +276,7 @@ def get_parser():
     parser.add_argument('--bpubk', help='bob public key file', default=None)
     parser.add_argument('--payerKey', '-p', help='payer private key: must have sols', default=None)
     parser.add_argument('--http', help='http client', default='https://api.devnet.solana.com')
-    parser.add_argument('--password', '-X', help='Password', default='passcode')
+    parser.add_argument('--password', '-X', help='Password', default='password')
     parser.add_argument('--numx', help='Min X tokens', default=1000)
     parser.add_argument('--numy', help='Min Y tokens', default=100)
     parser.add_argument('--pid', help='Program ID', required=True)
