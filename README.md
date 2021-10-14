@@ -34,7 +34,7 @@ python3 client/setup2.py --pid <program_id> \
 --token <user_token_account_public_key> \
 --user <user>
   
-`<user_token_account_public_key>`: public key of token account from where the tokens are deposited. \
+`user_token_account_public_key`: public key of token account from where the tokens are deposited. \
 For example: if Alice wants to send X tokens, then `user_token_account_public_key = alice_x_token_account_public_key`
   
 ## Withdraw
@@ -47,5 +47,5 @@ python3 client/setup2.py --pid <program_id> \
 --token <user_token_account_public_key> \
 --user <user>  
 
-`<user_token_account_public_key>`: public key of token account to where the tokens are submitted. \
+`user_token_account_public_key`: public key of token account to where the tokens are submitted. \
 For example: if Alice wants Y tokens from Bob, then `user_token_account_public_key = alice_y_token_account_public_key`
