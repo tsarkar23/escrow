@@ -91,7 +91,7 @@ def process(args):
     # Seed+password for sending data
     password = _encode('password')
     x_seeds = [
-        bytes(args.xpass),
+        bytes(args.xpass, encoding='utf8'),
         bytes(alice_pubkey),
         bytes(bob_pubkey),
         bytes(X_mint_account_address.pubkey),
@@ -100,7 +100,7 @@ def process(args):
     ]
 
     y_seeds = [
-        bytes(args.ypass),
+        bytes(args.ypass, encoding='utf8'),
         bytes(alice_pubkey),
         bytes(bob_pubkey),
         bytes(X_mint_account_address.pubkey),
@@ -109,7 +109,7 @@ def process(args):
     ]
 
     escrow_seeds = [
-        bytes(args.epass),
+        bytes(args.epass, encoding='utf8'),
         bytes(alice_pubkey),
         bytes(bob_pubkey),
         bytes(X_mint_account_address.pubkey),
@@ -206,17 +206,17 @@ def get_parser():
     parser.add_argument('--aliceKey', '-a', help='alice private key', default=None)
     parser.add_argument('--bobKey', '-b', help='bob private key', default=None)
     parser.add_argument('--payerKey', '-p', help='payer private key: must have sols', default=None)
-    parser.add_argument('--http', '-h', help='http client', default='https://api.devnet.solana.com')
+    parser.add_argument('--http', help='http client', default='https://api.devnet.solana.com')
     parser.add_argument('--password', '-X', help='Password', default='passcode')
     parser.add_argument('--numx', help='Min X tokens', default=1000)
     parser.add_argument('--numy', help='Min Y tokens', default=100)
-    parser.add_argument('--pid', help='Program ID', required=True)
-    parser.add_argument('--xpass', help='Vault X Pass', default='vault_x')
-    parser.add_argument('--ypass', help='Vault Y Pass', default='vault_y')
-    parser.add_argument('--epass', help='Escrow Pass', default='escrow')
+    parser.add_argument('--pid', help='Program ID', required=False)
+    parser.add_argument('--xpass', help='Vault X Pass', default="vault_x")
+    parser.add_argument('--ypass', help='Vault Y Pass', default="vault_y")
+    parser.add_argument('--epass', help='Escrow Pass', default="escrow")
     parser.add_argument('--xtoken', help='Send #X tokens', default=15)
     parser.add_argument('--ytoken', help='Send #Y tokens', default=13)
-    parser.add_argument('--optype', help='Operation Type', default='init', choices=['init', 'deposit', 'withdraw'])
+    parser.add_argument('--op_type', help='Operation Type', default='init', choices=['init', 'deposit', 'withdraw'])
     parser.add_argument('--user', help='Alice/Bob', default='alice', choices=['alice', 'bob'])
     return parser
 
@@ -232,6 +232,8 @@ def main(args=None):
 
     parser = get_parser()
     args = parser.parse_args(args)
+
+    process(args)
 
 
 if __name__ == '__main__':
