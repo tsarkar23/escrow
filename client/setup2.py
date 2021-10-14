@@ -72,6 +72,27 @@ def process_deposit(program_id, escrow_address, user_token_account,\
 
     time.sleep(30)  
 
+def process_withdraw(program_id, escrow_address, user_token_account,\
+                     vault, user_pubkey, data, http_client,\
+                     user_keypair):
+
+    tx = Transaction()
+    tx_instruction = TransactionInstruction(
+        program_id=program_id,
+        keys=[
+            AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
+            AccountMeta(pubkey=user_token_account, is_signer=False, is_writable=True), # x_a info
+            AccountMeta(pubkey=vault, is_signer=False, is_writable=True),
+            AccountMeta(pubkey=user_pubkey, is_signer=True, is_writable=False),
+            AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
+            ],
+        data=  data,
+    )
+
+    tx = tx.add(tx_instruction)
+    transaction_results = http_client.send_transaction(tx, *[user_keypair])
+    time.sleep(30)      
+
 
 def process(args):
     op_type = args.op_type
@@ -197,11 +218,13 @@ def process(args):
         x_mint_pubkey = PublicKey(json.load(open(args.mintx)))
         y_mint_pubkey = PublicKey(json.load(open(args.minty)))
         alice_X_token_account = PublicKey(json.load(open(args.aTokenX)))        
-
+        alice_Y_token_account = PublicKey(json.load(open(args.aTokenY)))
     elif user=='bob':
         x_mint_pubkey = PublicKey(json.load(open(args.mintx)))
         y_mint_pubkey = PublicKey(json.load(open(args.minty)))
+        bob_X_token_account = PublicKey(json.load(open(args.bTokenX)))
         bob_Y_token_account = PublicKey(json.load(open(args.bTokenY)))
+
 
     # Seed+password for sending data
     password = _encode(str(args.password))
@@ -264,6 +287,21 @@ def process(args):
             process_deposit(program_id, escrow_address, bob_Y_token_account, vaulty,\
                             bob_pubkey, data, http_client, bob_keypair)
 
+    elif op_type=='withdraw':
+        if user=='alice':
+            
+            # Alice withdraw Y
+            print('Alice is withdrawing Y')
+            data = pack('<B', 2)+password
+            process_deposit(program_id, escrow_address, alice_Y_token_account, vaulty,\
+                            alice_pubkey, data, http_client, alice_keypair)
+        elif user=='bob':
+            print('Bob is withdrawing X')
+            # Bob withdraw X
+            data = pack('<B', 2)+password
+            process_deposit(program_id, escrow_address, bob_X_token_account, vaultx,\
+                            bob_pubkey, data, http_client, bob_keypair)
+
 def get_parser():
     """
     Creates a new argument parser.
@@ -286,6 +324,8 @@ def get_parser():
     parser.add_argument('--xtoken', help='Send #X tokens', default=15)
     parser.add_argument('--ytoken', help='Send #Y tokens', default=13)
     parser.add_argument('--aTokenX', help='Alice X Token Account File', default=None)
+    parser.add_argument('--aTokenY', help='Alice Y Token Account File', default=None)
+    parser.add_argument('--bTokenX', help='Bob X Token Account File', default=None)
     parser.add_argument('--bTokenY', help='Bob Y Token Account File', default=None)
     parser.add_argument('--mintx', help='X Mint Account Public Key File', default=None)
     parser.add_argument('--minty', help='Y Mint Account Public Key File', default=None)
