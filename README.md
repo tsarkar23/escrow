@@ -7,14 +7,14 @@ solana program deploy dist/program/escrow.so --keypair <key_pair.json>
 After these steps, a Program ID is generated; store that.
 
 ## Initialization
-python3 client/setup2.py --pid 5LTHikV7h9vB4mHRRHqr6gwBngBXoZ7hmsSnBSaxLbEv \
+python3 client/setup2.py --pid <program_id> \
 --payerKP <alice_key_pair.json> \
 --apubk <alice_public_key> \
 --bpubk <bob_public_key> \
 --user alice \
 --op_type init
 
-In our case only alice can initiate. This step generates 
+In our case only alice can initiate. So, `payerKP=alice_key_pair.json`. This step generates 
 
 - alice_x_token_account_public_key,
 - alice_y_token_account_public_key, 
@@ -35,7 +35,7 @@ python3 client/setup2.py --pid <program_id> \
 --user <user>
   
 `user_token_account_public_key`: public key of token account from where the tokens are deposited. \
-For example: if Alice wants to send X tokens, then `user_token_account_public_key = alice_x_token_account_public_key`
+For example: if Alice wants to send X tokens, then `user_token_account_public_key = alice_x_token_account_public_key`. 
   
 ## Withdraw
 python3 client/setup2.py --pid <program_id> \
