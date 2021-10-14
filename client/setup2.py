@@ -287,6 +287,8 @@ def get_parser():
     parser.add_argument('--ytoken', help='Send #Y tokens', default=13)
     parser.add_argument('--aTokenX', help='Alice X Token Account File', default=None)
     parser.add_argument('--bTokenY', help='Bob Y Token Account File', default=None)
+    parser.add_argument('--mintx', help='X Mint Account Public Key File', default=None)
+    parser.add_argument('--minty', help='Y Mint Account Public Key File', default=None)
     parser.add_argument('--op_type', help='Operation Type', default='init', choices=['init', 'deposit', 'withdraw'])
     parser.add_argument('--user', help='Alice/Bob', default='alice', choices=['alice', 'bob'])
 
