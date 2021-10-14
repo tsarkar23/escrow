@@ -1,8 +1,9 @@
 
 Solana based on chain escrow project
 
-cargo build-bpf --bpf-out-dir=dist/program
-solana program deploy dist/program/escrow.so --keypair <key_pair.json>
+`cargo build-bpf --bpf-out-dir=dist/program`
+
+`solana program deploy dist/program/escrow.so --keypair <key_pair.json>`
 
 After these steps, a Program ID is generated; store that.
 
