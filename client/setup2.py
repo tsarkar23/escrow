@@ -25,169 +25,199 @@ def _encode(s, pad=32):
 
 TOKEN_PROGRAM_ID: PublicKey = PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
 
+def process(args):
+    op_type = args.op_type
+    user = args.user
+    if args.payerKey:
+        payer_loaded_account = solana.keypair.Keypair.generate(args.payerKey)
+    else:
+        payer_loaded_account = solana.keypair.Keypair.generate()
+    
+    if args.aliceKey:
+        alice_keypair = solana.keypair.Keypair.generate(args.aliceKey)
+    else:
+        alice_keypair = solana.keypair.Keypair.generate()
 
-payer_loaded_account = solana.keypair.Keypair.generate()
-payer_public_key = payer_loaded_account.public_key
+    if args.bobKey:
+        bob_keypair = solana.keypair.Keypair.generate(args.bobKey)
+    else:
+        bob_keypair = solana.keypair.Keypair.generate()
 
-http_client = Client("https://api.devnet.solana.com")
-
-# todo: change program_id to system program, change data size =0, change lampord for both alice and bob
-alice_keypair = solana.keypair.Keypair.generate()
-alice_pubkey = alice_keypair.public_key
-
-bob_keypair = solana.keypair.Keypair.generate()
-bob_pubkey = bob_keypair.public_key
-
-print(f"Payer Account: {payer_public_key}")
-print(f"alice Account: {alice_pubkey}")
-print(f"bob Account: {bob_pubkey}")
-
-import time
-http_client.request_airdrop(payer_loaded_account.public_key, 1000000000)
-time.sleep(15)
-http_client.request_airdrop(alice_pubkey, 1000000000)
-time.sleep(15)
-http_client.request_airdrop(bob_pubkey, 1000000000)
-print(http_client.get_balance(alice_pubkey))
+    http_client = Client(args.http)
+    payer_public_key = payer_loaded_account.public_key
+    alice_pubkey = alice_keypair.public_key
+    bob_pubkey = bob_keypair.public_key
 
 
-X_mint_account_address = Token.create_mint(conn= http_client, payer = payer_loaded_account,\
-                                           mint_authority = payer_loaded_account.public_key,\
-                                           decimals = 0, program_id = TOKEN_PROGRAM_ID, )
-Y_mint_account_address = Token.create_mint(conn= http_client, payer = payer_loaded_account,\
-                                           mint_authority = payer_loaded_account.public_key,\
-                                           decimals = 0, program_id = TOKEN_PROGRAM_ID, )
-alice_X_token_account = X_mint_account_address.create_associated_token_account(alice_pubkey)
-alice_Y_token_account = Y_mint_account_address.create_associated_token_account(alice_pubkey)
-bob_X_token_account = X_mint_account_address.create_associated_token_account(bob_pubkey)
-bob_Y_token_account = Y_mint_account_address.create_associated_token_account(bob_pubkey)
+    print(f"Payer Account: {payer_public_key}")
+    print(f"alice Account: {alice_pubkey}")
+    print(f"bob Account: {bob_pubkey}")
 
-X_mint_account_address.mint_to(alice_X_token_account,payer_loaded_account,1000)
-Y_mint_account_address.mint_to(bob_Y_token_account,payer_loaded_account,100)
+    if args.payerKey is None:
+        http_client.request_airdrop(payer_loaded_account.public_key, 1000000000)
+        time.sleep(15)
+    if args.aliceKey is None:
+        http_client.request_airdrop(alice_pubkey, 1000000000)
+        time.sleep(15)
+    if args.bobKey is None:
+        http_client.request_airdrop(bob_pubkey, 1000000000)
+        time.sleep(15)
+   
 
-# escrow meta-data account
-deployed_program_key = glob.glob("./dist/program/*.json")[0]
-deployed_program_key_account = solana.keypair.Keypair(json.load(open(deployed_program_key))[:32])
-program_id = deployed_program_key_account.public_key
-print(f"Program ID: {program_id}")
-# Seed+password for sending data
-password = _encode('password')
-x_seeds = [
-    b"vault_x",
-    bytes(alice_pubkey),
-    bytes(bob_pubkey),
-    bytes(X_mint_account_address.pubkey),
-    bytes(Y_mint_account_address.pubkey),
-    password,
-]
+    X_mint_account_address = Token.create_mint(conn= http_client, payer = payer_loaded_account,\
+                                            mint_authority = payer_loaded_account.public_key,\
+                                            decimals = 0, program_id = TOKEN_PROGRAM_ID, )
+    Y_mint_account_address = Token.create_mint(conn= http_client, payer = payer_loaded_account,\
+                                            mint_authority = payer_loaded_account.public_key,\
+                                            decimals = 0, program_id = TOKEN_PROGRAM_ID, )
 
-y_seeds = [
-    b"vault_y",
-    bytes(alice_pubkey),
-    bytes(bob_pubkey),
-    bytes(X_mint_account_address.pubkey),
-    bytes(Y_mint_account_address.pubkey),
-    password,
-]
+    alice_X_token_account = X_mint_account_address.create_associated_token_account(alice_pubkey)
+    alice_Y_token_account = Y_mint_account_address.create_associated_token_account(alice_pubkey)
+    bob_X_token_account = X_mint_account_address.create_associated_token_account(bob_pubkey)
+    bob_Y_token_account = Y_mint_account_address.create_associated_token_account(bob_pubkey)
 
-escrow_seeds = [
-    b"escrow",
-    bytes(alice_pubkey),
-    bytes(bob_pubkey),
-    bytes(X_mint_account_address.pubkey),
-    bytes(Y_mint_account_address.pubkey),
-    password,
-]
+    x_tokens = X_mint_account_address.get_account_info(alice_X_token_account).amount
+    y_tokens = Y_mint_account_address.get_account_info(bob_Y_token_account).amount
+    if x_tokens < args.numx:
+        X_mint_account_address.mint_to(alice_X_token_account,payer_loaded_account,args.xtoken)
+    if y_tokens < args.numy:
+        Y_mint_account_address.mint_to(bob_Y_token_account,payer_loaded_account,args.ytoken)
+    
+    # escrow meta-data account
+    deployed_program_key = glob.glob("./dist/program/*.json")[0]
+    deployed_program_key_account = solana.keypair.Keypair(json.load(open(deployed_program_key))[:32])
+    program_id = deployed_program_key_account.public_key
+    print(f"Program ID: {program_id}")
+    # Seed+password for sending data
+    password = _encode('password')
+    x_seeds = [
+        bytes(args.xpass),
+        bytes(alice_pubkey),
+        bytes(bob_pubkey),
+        bytes(X_mint_account_address.pubkey),
+        bytes(Y_mint_account_address.pubkey),
+        password,
+    ]
 
-# create vaults, necessary?
-vaultx, xseed = PublicKey.find_program_address(seeds=x_seeds,program_id=program_id)
-vaulty, yseed = PublicKey.find_program_address(seeds=y_seeds,program_id=program_id)
-escrow_address, escrow_seed = PublicKey.find_program_address(seeds=escrow_seeds,program_id=program_id)
+    y_seeds = [
+        bytes(args.ypass),
+        bytes(alice_pubkey),
+        bytes(bob_pubkey),
+        bytes(X_mint_account_address.pubkey),
+        bytes(Y_mint_account_address.pubkey),
+        password,
+    ]
 
-print('Start Initializing Accounts')
-# initialize transaction
-x_val = 13
-y_val = 15
-data = pack('<BQQ', 0,x_val,y_val)+password
-tx = Transaction()
-tx_instruction = TransactionInstruction(
-    program_id=program_id,
-    keys=[
-          AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
-          AccountMeta(pubkey=X_mint_account_address.pubkey, is_signer=False, is_writable=False),
-          AccountMeta(pubkey=Y_mint_account_address.pubkey, is_signer=False, is_writable=False),
-          AccountMeta(pubkey=vaultx, is_signer=False, is_writable=True),
-          AccountMeta(pubkey=vaulty, is_signer=False, is_writable=True),
-          AccountMeta(pubkey=payer_public_key, is_signer=True, is_writable=False),
-          AccountMeta(pubkey=alice_pubkey, is_signer=False, is_writable=False),
-          AccountMeta(pubkey=bob_pubkey, is_signer=False, is_writable=False),
-          AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
-          AccountMeta(pubkey=SYSVAR_RENT_PUBKEY, is_signer=False, is_writable=False),
-          AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
-         ],
-    data=data,
-)
+    escrow_seeds = [
+        bytes(args.epass),
+        bytes(alice_pubkey),
+        bytes(bob_pubkey),
+        bytes(X_mint_account_address.pubkey),
+        bytes(Y_mint_account_address.pubkey),
+        password,
+    ]
 
-tx = tx.add(tx_instruction)
-transaction_results = http_client.send_transaction(tx, *[payer_loaded_account])#, *[payer_loaded_account])
-print('Initializing Accounts Ended')
-
-time.sleep(30)
-
-# Alice deposit X
-print('Alice is depositing X')
-data = pack('<B', 1)+password
-tx = Transaction()
-tx_instruction = TransactionInstruction(
-    program_id=program_id,
-    keys=[
-          AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
-          AccountMeta(pubkey=alice_X_token_account, is_signer=False, is_writable=True), # x_a info
-          AccountMeta(pubkey=vaultx, is_signer=False, is_writable=True),
-          AccountMeta(pubkey=alice_pubkey, is_signer=True, is_writable=False),
-          AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
-         ],
-    data=  data,
-)
-
-tx = tx.add(tx_instruction)
-transaction_results = http_client.send_transaction(tx, *[alice_keypair])
-
-time.sleep(30)
-
-print('Bob is depositing Y')
-# Bob deposit Y
-data = pack('<B', 1)+password
-tx = Transaction()
-tx_instruction = TransactionInstruction(
-    program_id=program_id,
-    keys=[
-          AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
-          AccountMeta(pubkey=bob_Y_token_account, is_signer=False, is_writable=True),
-          AccountMeta(pubkey=vaulty, is_signer=False, is_writable=True),
-          AccountMeta(pubkey=bob_pubkey, is_signer=True, is_writable=False),
-          AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
-         ],
-    data=  data,
-)
-
-tx = tx.add(tx_instruction)
+    # create vaults, necessary?
+    vaultx, xseed = PublicKey.find_program_address(seeds=x_seeds,program_id=program_id)
+    vaulty, yseed = PublicKey.find_program_address(seeds=y_seeds,program_id=program_id)
+    escrow_address, escrow_seed = PublicKey.find_program_address(seeds=escrow_seeds,program_id=program_id)
 
 
-transaction_results = http_client.send_transaction(tx, *[bob_keypair])
+    if op_type == 'init': 
+        print('Start Initializing Accounts')
+        # initialize transaction
+        x_val = args.xtoken
+        y_val = args.ytoken
+        data = pack('<BQQ', 0,x_val,y_val)+password
+        tx = Transaction()
+        tx_instruction = TransactionInstruction(
+            program_id=program_id,
+            keys=[
+                AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
+                AccountMeta(pubkey=X_mint_account_address.pubkey, is_signer=False, is_writable=False),
+                AccountMeta(pubkey=Y_mint_account_address.pubkey, is_signer=False, is_writable=False),
+                AccountMeta(pubkey=vaultx, is_signer=False, is_writable=True),
+                AccountMeta(pubkey=vaulty, is_signer=False, is_writable=True),
+                AccountMeta(pubkey=payer_public_key, is_signer=True, is_writable=False),
+                AccountMeta(pubkey=alice_pubkey, is_signer=False, is_writable=False),
+                AccountMeta(pubkey=bob_pubkey, is_signer=False, is_writable=False),
+                AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
+                AccountMeta(pubkey=SYSVAR_RENT_PUBKEY, is_signer=False, is_writable=False),
+                AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
+                ],
+            data=data,
+        )
+
+        tx = tx.add(tx_instruction)
+        transaction_results = http_client.send_transaction(tx, *[payer_loaded_account])#, *[payer_loaded_account])
+        print('Initializing Accounts Ended') 
+
+        time.sleep(30)
+    elif op_type=='deposit':
+        if user=='alice':
+            # Alice deposit X
+            print('Alice is depositing X')
+            data = pack('<B', 1)+password
+            tx = Transaction()
+            tx_instruction = TransactionInstruction(
+                program_id=program_id,
+                keys=[
+                    AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
+                    AccountMeta(pubkey=alice_X_token_account, is_signer=False, is_writable=True), # x_a info
+                    AccountMeta(pubkey=vaultx, is_signer=False, is_writable=True),
+                    AccountMeta(pubkey=alice_pubkey, is_signer=True, is_writable=False),
+                    AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
+                    ],
+                data=  data,
+            )
+
+            tx = tx.add(tx_instruction)
+            transaction_results = http_client.send_transaction(tx, *[alice_keypair])
+
+            time.sleep(30)
+        elif user=='bob':
+            print('Bob is depositing Y')
+            # Bob deposit Y
+            data = pack('<B', 1)+password
+            tx = Transaction()
+            tx_instruction = TransactionInstruction(
+                program_id=program_id,
+                keys=[
+                    AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
+                    AccountMeta(pubkey=bob_Y_token_account, is_signer=False, is_writable=True),
+                    AccountMeta(pubkey=vaulty, is_signer=False, is_writable=True),
+                    AccountMeta(pubkey=bob_pubkey, is_signer=True, is_writable=False),
+                    AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
+                    ],
+                data=  data,
+            )
+
+            tx = tx.add(tx_instruction)
+
+
+            transaction_results = http_client.send_transaction(tx, *[bob_keypair])
 
 def get_parser():
     """
     Creates a new argument parser.
     """
     parser = argparse.ArgumentParser(description='Send Escrow Data')
+
     parser.add_argument('--aliceKey', '-a', help='alice private key', default=None)
     parser.add_argument('--bobKey', '-b', help='bob private key', default=None)
     parser.add_argument('--payerKey', '-p', help='payer private key: must have sols', default=None)
     parser.add_argument('--http', '-h', help='http client', default='https://api.devnet.solana.com')
-
-
-
+    parser.add_argument('--password', '-X', help='Password', default='passcode')
+    parser.add_argument('--numx', help='Min X tokens', default=1000)
+    parser.add_argument('--numy', help='Min Y tokens', default=100)
+    parser.add_argument('--pid', help='Program ID', required=True)
+    parser.add_argument('--xpass', help='Vault X Pass', default='vault_x')
+    parser.add_argument('--ypass', help='Vault Y Pass', default='vault_y')
+    parser.add_argument('--epass', help='Escrow Pass', default='escrow')
+    parser.add_argument('--xtoken', help='Send #X tokens', default=15)
+    parser.add_argument('--ytoken', help='Send #Y tokens', default=13)
+    parser.add_argument('--optype', help='Operation Type', default='init', choices=['init', 'deposit', 'withdraw'])
+    parser.add_argument('--user', help='Alice/Bob', default='alice', choices=['alice', 'bob'])
     return parser
 
 
