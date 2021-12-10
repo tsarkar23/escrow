@@ -1,8 +1,7 @@
+use borsh::{BorshSerialize, BorshDeserialize};
 
-use borsh::{BorshDeserialize, BorshSerialize};
 
-
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug)]
 pub enum EscrowInstruction {
     /// Starts the trade by creating and populating an escrow account and transferring ownership of the given temp token account to the PDA
     /// Accounts expected:
@@ -14,10 +13,14 @@ pub enum EscrowInstruction {
     /// 4. `[]` The rent sysvar
     /// 5. `[]` The token program
     InitEscrow {
-        amounts: [u64; 3], //amounts[0]:x_val, amounts[1]:y_val, amounts[2]:pass
+        amount_x: u64, //amounts[0]:x_val, amounts[1]:y_val, amounts[2]:pass
+        amount_y: u64,
+        pass: [u8; 32],
     },
-    Deposit,
+    Deposit{
+        pass: [u8; 32],
+    },
     Withdrawal {
-        pass: [u64; 1],
+        pass: [u8; 32],
     },
 }

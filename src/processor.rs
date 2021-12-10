@@ -4,28 +4,16 @@ use solana_program::{
     entrypoint::ProgramResult,
     msg,
     program_error::ProgramError,
+    program_pack::Pack,
     pubkey::Pubkey,
     system_instruction,
     sysvar::{rent::Rent, Sysvar},
 };
-use std::convert::TryInto;
-use std::mem;
+
+use spl_token::{instruction::initialize_account, instruction::transfer, state::Account};
+
 use crate::instruction::EscrowInstruction;
-/// Define the type of state stored in accounts
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
-struct EscrowData {
-    xval: u64,
-    yval: u64,
-    a_pub_key: Pubkey,
-    b_pub_key: Pubkey,
-    mint_x_pub_key: Pubkey,
-    mint_y_pub_key: Pubkey,
-    vault_x_pub_key: Pubkey,
-    vault_y_pub_key: Pubkey,
-    init_deposit_status: u64,
-    is_a_withdrawed: u8,
-    is_b_withdrawed: u8,
-}
+use crate::state::{EscrowData, EscrowState};
 
 pub struct Processor;
 impl Processor {
@@ -37,401 +25,531 @@ impl Processor {
         let instruction = EscrowInstruction::try_from_slice(instruction_data)?;
 
         match instruction {
-            EscrowInstruction::InitEscrow { amounts } => {
+            EscrowInstruction::InitEscrow {
+                amount_x,
+                amount_y,
+                pass,
+            } => {
                 msg!("Instruction: InitEscrow");
-                Self::process_init_escrow(accounts, amounts, program_id)
+                Self::process_init_escrow(accounts, amount_x, amount_y, pass, program_id)
             }
-            EscrowInstruction::Deposit => {
+            EscrowInstruction::Deposit { pass } => {
                 msg!("Instruction: Deposit");
-                Self::process_deposit(accounts)
+                Self::process_deposit(accounts, pass, program_id)
             }
-            EscrowInstruction::Withdrawal {pass}=> {
+            EscrowInstruction::Withdrawal { pass } => {
                 msg!("Instruction: Withdrawal");
                 Self::process_withdrawal(accounts, pass, program_id)
             }
         }
     }
 
-    pub fn process_withdrawal(
+    pub fn process_init_escrow(
         accounts: &[AccountInfo],
-        pass: [u64; 1],
-        program_id: &Pubkey) -> ProgramResult {
+        size_x: u64,
+        size_y: u64,
+        pass: [u8; 32],
+        program_id: &Pubkey,
+    ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
-        let escrow_info = next_account_info(account_info_iter)?; // mint  public address
-        let taker_token_info = next_account_info(account_info_iter)?;
-        let vault_info = next_account_info(account_info_iter)?; // mint  public address
-        let taker_info = next_account_info(account_info_iter)?;
-        let token_program_info = next_account_info(account_info_iter)?; // token_program_id
-        msg!("process_withdrawal 1");
+        let escrow_info = next_account_info(account_info_iter)?;
+        let mint_x_info = next_account_info(account_info_iter)?;
+        let mint_y_info = next_account_info(account_info_iter)?;
+        let vault_x_info = next_account_info(account_info_iter)?;
+        let vault_y_info = next_account_info(account_info_iter)?;
+        let payer_info = next_account_info(account_info_iter)?;
+        let alice_info = next_account_info(account_info_iter)?;
+        let bob_info = next_account_info(account_info_iter)?;
+        let token_program_info = next_account_info(account_info_iter)?;
+        let rent_info = next_account_info(account_info_iter)?;
+        let system_program_info = next_account_info(account_info_iter)?;
+
+        let escrow_bump = if escrow_info.data_len() == 0 {
+            msg!("Creating escrow metadata");
+            let escrow_seeds = &[
+                b"escrow",
+                alice_info.key.as_ref(),
+                bob_info.key.as_ref(),
+                mint_x_info.key.as_ref(),
+                mint_y_info.key.as_ref(),
+                pass.as_ref(), //.to_le_bytes(),
+            ];
+            let rent = &Rent::from_account_info(rent_info)?;
+            let required_lamports = rent
+                .minimum_balance(EscrowData::LEN)
+                .max(1)
+                .saturating_sub(escrow_info.lamports());
+            let (_, bump) = Pubkey::find_program_address(escrow_seeds, program_id);
+            let escrow_seeds = &[
+                b"escrow",
+                alice_info.key.as_ref(),
+                bob_info.key.as_ref(),
+                mint_x_info.key.as_ref(),
+                mint_y_info.key.as_ref(),
+                pass.as_ref(),
+                &[bump],
+            ];
+            solana_program::program::invoke_signed(
+                &system_instruction::create_account(
+                    payer_info.key,         //from_pubkey
+                    escrow_info.key,        //to_pubkey
+                    required_lamports,      //lamports
+                    EscrowData::LEN as u64, //space
+                    program_id,
+                ),
+                &[
+                    payer_info.clone(),
+                    escrow_info.clone(),
+                    system_program_info.clone(),
+                ],
+                &[escrow_seeds],
+            )?;
+            bump
+        } else {
+            let escrow_seeds = &[
+                b"escrow",
+                alice_info.key.as_ref(),
+                bob_info.key.as_ref(),
+                mint_x_info.key.as_ref(),
+                mint_y_info.key.as_ref(),
+                pass.as_ref(), // .to_le_bytes(),
+            ];
+            let (_, bump) = Pubkey::find_program_address(escrow_seeds, program_id);
+            bump
+        };
+        let vault_x_bump = if vault_x_info.data_len() == 0 {
+            msg!("Creating vault for mint x");
+            let bump = create_vault(
+                program_id,
+                &vault_x_info,
+                &alice_info,
+                &bob_info,
+                &mint_x_info,
+                &mint_y_info,
+                &payer_info,
+                &token_program_info,
+                &rent_info,
+                &system_program_info,
+                pass,
+                b"vault_x",
+            )?;
+            solana_program::program::invoke(
+                &initialize_account(
+                    token_program_info.key,
+                    vault_x_info.key,
+                    mint_x_info.key,
+                    escrow_info.key,
+                )?,
+                &[
+                    vault_x_info.clone(),
+                    mint_x_info.clone(),
+                    escrow_info.clone(),
+                    rent_info.clone(),
+                    token_program_info.clone(),
+                ],
+            )?;
+            bump
+        } else {
+            let seeds = &[
+                b"vault_x",
+                alice_info.key.as_ref(),
+                bob_info.key.as_ref(),
+                mint_x_info.key.as_ref(),
+                mint_y_info.key.as_ref(),
+                pass.as_ref(), //.to_le_bytes(),
+            ];
+            let (_, bump) = Pubkey::find_program_address(seeds, program_id);
+            bump
+        };
+        let vault_y_bump = if vault_y_info.data_len() == 0 {
+            msg!("Creating vault for mint y");
+            let bump = create_vault(
+                program_id,
+                &vault_y_info,
+                &alice_info,
+                &bob_info,
+                &mint_x_info,
+                &mint_y_info,
+                &payer_info,
+                &token_program_info,
+                &rent_info,
+                &system_program_info,
+                pass,
+                b"vault_y",
+            )?;
+            solana_program::program::invoke(
+                &initialize_account(
+                    token_program_info.key,
+                    vault_y_info.key,
+                    mint_y_info.key,
+                    escrow_info.key,
+                )?,
+                &[
+                    vault_y_info.clone(),
+                    mint_y_info.clone(),
+                    escrow_info.clone(),
+                    rent_info.clone(),
+                    token_program_info.clone(),
+                ],
+            )?;
+            bump
+        } else {
+            let seeds = &[
+                b"vault_y",
+                alice_info.key.as_ref(),
+                bob_info.key.as_ref(),
+                mint_x_info.key.as_ref(),
+                mint_y_info.key.as_ref(),
+                pass.as_ref(),
+            ];
+            let (_, bump) = Pubkey::find_program_address(seeds, program_id);
+            bump
+        };
+
         let escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
-        
-        let amount;
-        msg!("process_withdrawal 2");
-        if escrow_data.init_deposit_status <= 2 {
-            msg!("Hey it is not the time to withdraw, you may go ahead and cancel to get back your token!");
-            return Err(ProgramError::InvalidAccountData);
+        if escrow_data.state != EscrowState::Uninitialized {
+            msg!("Trying reinitialize an existing escrow");
+            return Err(ProgramError::InvalidAccountData.into());
         }
-        msg!("process_withdrawal 3");
-        if taker_info.key.as_ref() == escrow_data.a_pub_key.as_ref() {
-            if escrow_data.is_a_withdrawed != 0 {
-                msg!("Already done!");
-                return Err(ProgramError::InvalidAccountData);
-            }
-            amount = escrow_data.yval;
-        } else if taker_info.key.as_ref() == escrow_data.b_pub_key.as_ref() {
-            if escrow_data.is_b_withdrawed != 0 {
-                msg!("Already done!");
-                return Err(ProgramError::InvalidAccountData);
-            }
-            amount = escrow_data.xval;
-        } else{
-            msg!("Not authorized!");
-            return Err(ProgramError::InvalidAccountData);
-        };
-        msg!("process_withdrawal 4");
-        let tmp = pass[0].to_le_bytes();
-        let escrow_seeds = &[
-            b"escrow",
-            tmp.as_ref(),
-            escrow_data.a_pub_key.as_ref(),
-            escrow_data.b_pub_key.as_ref(),
-            escrow_data.mint_x_pub_key.as_ref(),
-            escrow_data.mint_y_pub_key.as_ref(),
-        ];
 
-        // Do the checkings
-        msg!("process_withdrawal 5");
-        withdraw_token(
-            program_id,
-            escrow_info,
-            vault_info,
-            taker_token_info,
-            token_program_info,
-            escrow_seeds,
-            amount,
-        )?;
-        msg!("process_withdrawal 6");
-        let escrow_data = EscrowData {
-            xval: escrow_data.xval,
-            yval: escrow_data.yval,
-            a_pub_key: escrow_data.a_pub_key,
-            b_pub_key: escrow_data.b_pub_key,
-            mint_x_pub_key: escrow_data.mint_x_pub_key,
-            mint_y_pub_key: escrow_data.mint_y_pub_key,
-            vault_x_pub_key: escrow_data.vault_x_pub_key,
-            vault_y_pub_key: escrow_data.vault_y_pub_key,
-            init_deposit_status: escrow_data.init_deposit_status, //0: not initialized, 1: initialized but no one deposited, 2: alice deposited, 3:both deposited
-            is_a_withdrawed: if taker_info.key.as_ref() == escrow_data.a_pub_key.as_ref() {
-                1
-            } else {
-                escrow_data.is_a_withdrawed
-            },
-            is_b_withdrawed: if taker_info.key.as_ref() == escrow_data.b_pub_key.as_ref() {
-                1
-            } else {
-                escrow_data.is_b_withdrawed
-            },
-        };
-        msg!("process_withdrawal 7");
-        escrow_data.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?;
-        msg!("process_withdrawal 8");
-        //todo: delete escrow if compeletely done!
-
+        EscrowData {
+            size_x,
+            size_y,
+            pubkey_alice: *alice_info.key,
+            pubkey_bob: *bob_info.key,
+            pubkey_mint_x: *mint_x_info.key,
+            pubkey_mint_y: *mint_y_info.key,
+            state: EscrowState::Initialized,
+            escrow_bump,
+            vault_x_bump,
+            vault_y_bump,
+        }
+        .serialize(&mut *escrow_info.data.borrow_mut())?;
         Ok(())
     }
 
-
-
-
-
-
     pub fn process_deposit(
-        accounts: &[AccountInfo]) -> ProgramResult {
+        accounts: &[AccountInfo],
+        pass: [u8;32],
+        program_id: &Pubkey,
+    ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let escrow_info = next_account_info(account_info_iter)?; // mint  public address
         let payer_token_info = next_account_info(account_info_iter)?;
         let vault_info = next_account_info(account_info_iter)?; // mint  public address
         let payer_info = next_account_info(account_info_iter)?; // payer_account, is it both public and private key? yeah
         let token_program_info = next_account_info(account_info_iter)?; // token_program_id
-
-        // Todo: Check if token_program_info is the "real" token program info
-        msg!("process_deposit started here!");
-        let escrow_size:u64 = (mem::size_of::<EscrowData>()).try_into().unwrap();
-        msg!("process_deposit 1: {:?}", escrow_size);
-        let escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
-        msg!("process_deposit 1");
-        let amount;
-        msg!("process_deposit 2");
-        if escrow_data.init_deposit_status == 0 {
-            if payer_info.key.as_ref() != escrow_data.a_pub_key.as_ref() {
-                msg!("Account has not initialized yet!");
+        let mut escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
+        msg!("Validating and chaning state");
+        match escrow_data.state {
+            EscrowState::Initialized => {
+                if *payer_info.key == escrow_data.pubkey_alice {
+                    escrow_data.state = EscrowState::DepositAlice;
+                } else if *payer_info.key == escrow_data.pubkey_bob {
+                    escrow_data.state = EscrowState::DepositBob;
+                } else {
+                    msg!("Invalid State");
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+            EscrowState::DepositAlice => {
+                if *payer_info.key == escrow_data.pubkey_bob {
+                    escrow_data.state = EscrowState::Committed;
+                } else {
+                    msg!("Invalid State");
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+            EscrowState::DepositBob => {
+                if *payer_info.key == escrow_data.pubkey_alice {
+                    escrow_data.state = EscrowState::Committed;
+                } else {
+                    msg!("Invalid State");
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+            _ => {
+                msg!("Invalid State");
                 return Err(ProgramError::InvalidAccountData);
             }
         }
-        msg!("process_deposit 3");
-        if escrow_data.init_deposit_status == 1 {
-            if payer_info.key.as_ref() != escrow_data.a_pub_key.as_ref() {
-                msg!(
-                    "Initiator ({}) needs to transfer! But this id want's to pay: {}",
-                    escrow_data.a_pub_key,
-                    payer_info.key
-                );
-                return Err(ProgramError::InvalidAccountData);
-            }
-            amount = escrow_data.xval;
-        }else if escrow_data.init_deposit_status == 2 {
-            if payer_info.key.as_ref() != escrow_data.b_pub_key.as_ref() {
-                msg!("other side should transfer at this moment!");
-                return Err(ProgramError::InvalidAccountData);
-            }
-            amount = escrow_data.yval;
-        } else {
-            msg!("Hey it is not the time!");
+
+        msg!("Validating account ownership");
+        if payer_token_info.owner != token_program_info.key {
+            msg!("Invalid Token Account (system account not owned by Token Program)");
             return Err(ProgramError::InvalidAccountData);
         }
-        msg!("process_deposit 4");
-        deposit_token(
-            payer_info,
-            vault_info,
-            payer_token_info,
-            token_program_info,
-            amount,
-        )?;
-        msg!("process_deposit 5");
-        let escrow_data = EscrowData {
-            xval: escrow_data.xval,
-            yval: escrow_data.yval,
-            a_pub_key: escrow_data.a_pub_key,
-            b_pub_key: escrow_data.b_pub_key,
-            mint_x_pub_key: escrow_data.mint_x_pub_key,
-            mint_y_pub_key: escrow_data.mint_y_pub_key,
-            vault_x_pub_key: escrow_data.vault_x_pub_key,
-            vault_y_pub_key: escrow_data.vault_y_pub_key,
-            init_deposit_status: escrow_data.init_deposit_status + 1, //0: not initialized, 1: initialized but no one deposited, 2: alice deposited, 3:both deposited
-            is_a_withdrawed: 0,
-            is_b_withdrawed: 0,
+        let token_account: Account = Account::unpack_unchecked(&payer_token_info.data.borrow())?;
+        if token_account.owner != *payer_info.key {
+            msg!("Invalid Token Account (\"User space\" owner mismatch)");
+            return Err(ProgramError::InvalidAccountData);
+        }
+
+        let (vault_seed, bump_seed, size) = if *payer_info.key == escrow_data.pubkey_alice {
+            if token_account.mint != escrow_data.pubkey_mint_x {
+                msg!("Invalid Mint");
+                return Err(ProgramError::InvalidAccountData);
+            }
+            (b"vault_x", escrow_data.vault_x_bump, escrow_data.size_x)
+        } else if *payer_info.key == escrow_data.pubkey_bob {
+            if token_account.mint != escrow_data.pubkey_mint_y {
+                msg!("Invalid Mint");
+                return Err(ProgramError::InvalidAccountData);
+            }
+            (b"vault_y", escrow_data.vault_y_bump, escrow_data.size_y)
+        } else {
+            msg!("Invalid Owner");
+            return Err(ProgramError::InvalidAccountData);
         };
-        msg!("process_deposit 6");
+        let seeds = &[
+            vault_seed,
+            escrow_data.pubkey_alice.as_ref(),
+            escrow_data.pubkey_bob.as_ref(),
+            escrow_data.pubkey_mint_x.as_ref(),
+            escrow_data.pubkey_mint_y.as_ref(),
+            pass.as_ref(), // .to_le_bytes(),
+            &[bump_seed],
+        ];
+        let vault_pubkey = Pubkey::create_program_address(seeds, program_id)?;
+        if vault_pubkey != *vault_info.key {
+            msg!("Vault key mismatch");
+            return Err(ProgramError::InvalidAccountData);
+        }
+        msg!("Validating escrow data");
+        let escrow_seeds = &[
+            b"escrow",
+            escrow_data.pubkey_alice.as_ref(),
+            escrow_data.pubkey_bob.as_ref(),
+            escrow_data.pubkey_mint_x.as_ref(),
+            escrow_data.pubkey_mint_y.as_ref(),
+            pass.as_ref(), // .to_le_bytes(),
+            &[escrow_data.escrow_bump],
+        ];
+        let escrow_key = Pubkey::create_program_address(escrow_seeds, program_id)?;
+        if escrow_key != *escrow_info.key {
+            msg!("Escrow key mismatch");
+            return Err(ProgramError::InvalidAccountData);
+        }
+        msg!("Sending transfer");
+        solana_program::program::invoke(
+            &spl_token::instruction::transfer(
+                token_program_info.key,
+                payer_token_info.key,
+                &vault_info.key,
+                &payer_info.key,
+                &[],
+                size,
+            )?,
+            &[
+                payer_token_info.clone(),
+                payer_info.clone(),
+                vault_info.clone(),
+                token_program_info.clone(),
+            ],
+        )?;
         escrow_data.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?;
         Ok(())
     }
 
-    pub fn process_init_escrow(
+    pub fn process_withdrawal(
         accounts: &[AccountInfo],
-        amounts: [u64; 3],
+        pass: [u8; 32],
         program_id: &Pubkey,
     ) -> ProgramResult {
-        msg!("process_init_escrow");
         let account_info_iter = &mut accounts.iter();
-        let escrow_info = next_account_info(account_info_iter)?; // mint  public address
-        let mint_x_info = next_account_info(account_info_iter)?; // mint  public address
-        let mint_y_info = next_account_info(account_info_iter)?; // mint  public address
-        let vault_x_info = next_account_info(account_info_iter)?; // mint  public address
-        let vault_y_info = next_account_info(account_info_iter)?; // mint  public address
-        let payer_info = next_account_info(account_info_iter)?; // payer_account, is it both public and private key? yeah
-        let alice_info = next_account_info(account_info_iter)?; // payer_account, is it both public and private key? yeah
-        let bob_info = next_account_info(account_info_iter)?; // payer_account, is it both public and private key? yeah
-        let token_program_info = next_account_info(account_info_iter)?; // token_program_id
-        let rent_info = next_account_info(account_info_iter)?; // solana.py from solana.sysvar import SYSVAR_RENT_PUBKEY
-        let system_program_info = next_account_info(account_info_iter)?; // system program public key? public_key(1)?
+        let escrow_info = next_account_info(account_info_iter)?;
+        let taker_token_info = next_account_info(account_info_iter)?;
+        let vault_info = next_account_info(account_info_iter)?;
+        let taker_info = next_account_info(account_info_iter)?;
+        let token_program_info = next_account_info(account_info_iter)?;
+        msg!("process_withdrawal 1");
+        let mut escrow_data = EscrowData::try_from_slice(&escrow_info.data.borrow())?;
 
-        msg!("password {}", amounts[2]);
-        msg!("password {:?}", amounts[2].to_le_bytes().as_ref());
-        msg!("alice pub key {:?}", alice_info.key.as_ref());
-        // return Err(ProgramError::InvalidAccountData);
-        msg!("init: 1");
-        create_account(
-            program_id,
-            &vault_x_info.clone(),
-            &mint_x_info.clone(),
-            &escrow_info.clone(), // account owner info
-            &payer_info.clone(),
-            &token_program_info.clone(),
-            &rent_info.clone(),
-            &system_program_info.clone(),
-            &[
-                b"vault_x",
-                amounts[2].to_le_bytes().as_ref(),
-                alice_info.key.as_ref(),
-                bob_info.key.as_ref(),
-                mint_x_info.key.as_ref(),
-                mint_y_info.key.as_ref(),
-            ],
-            165,
-        )?;
-        msg!("init: 2");
-        create_account(
-            program_id,
-            &vault_y_info.clone(),
-            &mint_y_info.clone(),
-            &escrow_info.clone(), // account owner info
-            &payer_info.clone(),
-            &token_program_info.clone(),
-            &rent_info.clone(),
-            &system_program_info.clone(),
-            &[
-                b"vault_y",
-                amounts[2].to_le_bytes().as_ref(),
-                alice_info.key.as_ref(),
-                bob_info.key.as_ref(),
-                mint_x_info.key.as_ref(),
-                mint_y_info.key.as_ref(),
-            ],
-            165,
-        )?;
-        msg!("init: 3");
-        let escrow_size:u64 = (mem::size_of::<EscrowData>()).try_into().unwrap();
-        msg!("init: 3 {:?}", escrow_size);
-        create_escrow_account(
-            program_id,
-            &escrow_info.clone(),
-            &payer_info.clone(),
-            &rent_info.clone(),
-            &system_program_info.clone(),
-            &[
-                b"escrow",
-                amounts[2].to_le_bytes().as_ref(),
-                alice_info.key.as_ref(),
-                bob_info.key.as_ref(),
-                mint_x_info.key.as_ref(),
-                mint_y_info.key.as_ref(),
-            ],
-            218, // escrow_size
-        )?;
-        msg!("init: 4");
-        let escrow_data = EscrowData {
-            xval: amounts[0],
-            yval: amounts[1],
-            a_pub_key: *alice_info.key,
-            b_pub_key: *bob_info.key,
-            mint_x_pub_key: *mint_x_info.key,
-            mint_y_pub_key: *mint_y_info.key,
-            vault_x_pub_key: *vault_x_info.key,
-            vault_y_pub_key: *vault_y_info.key,
-            init_deposit_status: 1u64, //0: not initialized, 1: initialized but no one deposited, 2: alice deposited, 3:both deposited
-            is_a_withdrawed: 0,
-            is_b_withdrawed: 0,
+        let withdraw_mint = match escrow_data.state {
+            EscrowState::Committed => {
+                if *taker_info.key == escrow_data.pubkey_alice {
+                    escrow_data.state = EscrowState::WithdrawAlice;
+                    escrow_data.pubkey_mint_y
+                } else if *taker_info.key == escrow_data.pubkey_bob {
+                    escrow_data.state = EscrowState::WithdrawBob;
+                    escrow_data.pubkey_mint_x
+                } else {
+                    msg!("Invalid State");
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+            EscrowState::WithdrawAlice => {
+                if *taker_info.key == escrow_data.pubkey_bob {
+                    escrow_data.state = EscrowState::Uninitialized;
+                    escrow_data.pubkey_mint_x
+                } else {
+                    msg!("Invalid State");
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+            EscrowState::WithdrawBob => {
+                if *taker_info.key == escrow_data.pubkey_alice {
+                    escrow_data.state = EscrowState::Uninitialized;
+                    escrow_data.pubkey_mint_y
+                } else {
+                    msg!("Invalid State");
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+            EscrowState::DepositAlice => {
+                if *taker_info.key == escrow_data.pubkey_alice {
+                    escrow_data.state = EscrowState::Initialized;
+                    escrow_data.pubkey_mint_x
+                } else {
+                    msg!("Invalid State");
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+            EscrowState::DepositBob => {
+                if *taker_info.key == escrow_data.pubkey_alice {
+                    escrow_data.state = EscrowState::Initialized;
+                    escrow_data.pubkey_mint_y
+                } else {
+                    msg!("Invalid State");
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+            _ => {
+                msg!("Invalid State");
+                return Err(ProgramError::InvalidAccountData);
+            }
         };
-        msg!("init: 5");
-        escrow_data.serialize(&mut &mut escrow_info.data.borrow_mut()[..])?; //write escrow_data into escrow_info.data
-        msg!("init: 6");
+
+        msg!("Validating account ownership");
+        if taker_token_info.owner != token_program_info.key {
+            msg!("Invalid Token Account (system account not owned by Token Program)");
+            return Err(ProgramError::InvalidAccountData);
+        }
+        let token_account: Account = Account::unpack_unchecked(&taker_token_info.data.borrow())?;
+        if token_account.owner != *taker_info.key {
+            msg!("Invalid Token Account (\"User space\" owner mismatch)");
+            return Err(ProgramError::InvalidAccountData);
+        }
+
+        if token_account.mint != withdraw_mint {
+            msg!("Invalid Mint");
+            return Err(ProgramError::InvalidAccountData);
+        }
+
+        let (vault_seed, bump_seed, size) = if withdraw_mint == escrow_data.pubkey_mint_y {
+            (b"vault_y", escrow_data.vault_y_bump, escrow_data.size_y)
+        } else if withdraw_mint == escrow_data.pubkey_mint_x {
+            (b"vault_x", escrow_data.vault_x_bump, escrow_data.size_x)
+        } else {
+            msg!("Invalid Mint");
+            return Err(ProgramError::InvalidAccountData);
+        };
+
+        msg!("Validating vault");
+        let vault_seeds = &[
+            vault_seed,
+            escrow_data.pubkey_alice.as_ref(),
+            escrow_data.pubkey_bob.as_ref(),
+            escrow_data.pubkey_mint_x.as_ref(),
+            escrow_data.pubkey_mint_y.as_ref(),
+            pass.as_ref(),
+            &[bump_seed],
+        ];
+        let vault_pubkey = Pubkey::create_program_address(vault_seeds, program_id)?;
+        if vault_pubkey != *vault_info.key {
+            msg!("Vault key mismatch");
+            return Err(ProgramError::InvalidAccountData);
+        }
+        msg!("Validating escrow data");
+
+        let escrow_seeds = &[
+            b"escrow",
+            escrow_data.pubkey_alice.as_ref(),
+            escrow_data.pubkey_bob.as_ref(),
+            escrow_data.pubkey_mint_x.as_ref(),
+            escrow_data.pubkey_mint_y.as_ref(),
+            pass.as_ref(),
+            &[escrow_data.escrow_bump],
+        ];
+
+        let escrow_key = Pubkey::create_program_address(escrow_seeds, program_id)?;
+        if escrow_key != *escrow_info.key {
+            msg!("Escrow key mismatch");
+            return Err(ProgramError::InvalidAccountData);
+        }
+        msg!("Sending transfer");
+
+        solana_program::program::invoke_signed(
+            &transfer(
+                token_program_info.key,
+                &vault_info.key,
+                taker_token_info.key,
+                &escrow_info.key,
+                &[],
+                size,
+            )?,
+            &[
+                vault_info.clone(),
+                escrow_info.clone(),
+                taker_token_info.clone(),
+                token_program_info.clone(),
+            ],
+            &[escrow_seeds],
+        )?;
+
+        escrow_data.serialize(&mut *escrow_info.data.borrow_mut())?;
+
         Ok(())
     }
 }
 
-fn deposit_token<'a>(
-    sender_info: &AccountInfo<'a>, //initiator
-    vault_info: &AccountInfo<'a>,
-    token_info: &AccountInfo<'a>,
-    token_program_info: &AccountInfo<'a>,
-    amount: u64,
-) -> ProgramResult {
-    msg!("deposit_token 1");
-    let transfer_from_sender = spl_token::instruction::transfer(
-        token_program_info.key,
-        token_info.key,
-        &vault_info.key,
-        &sender_info.key,    //alice
-        &[&sender_info.key], //alice
-        amount,
-    )?;
-    msg!("deposit_token 2");
-    solana_program::program::invoke(
-        &transfer_from_sender,
-        &[
-            token_info.clone(),  //X_a
-            sender_info.clone(), //alice
-            vault_info.clone(),  //vault_X
-            token_program_info.clone(),
-        ],
-    )?;
-    msg!("deposit_token 3");
-
-    Ok(())
-}
-
-fn withdraw_token<'a>(
-    program_id: &Pubkey,
-    escrow_info: &AccountInfo<'a>,
-    vault_info: &AccountInfo<'a>,
-    token_info: &AccountInfo<'a>,
-    token_program_info: &AccountInfo<'a>,
-    escrow_seed: &[&[u8]],
-    amount: u64,
-) -> ProgramResult {
-    msg!("withdraw_token 1");
-    let (_, escrow_bump_seed) = Pubkey::find_program_address(escrow_seed, program_id);
-    msg!("withdraw_token 2");
-    let esc_seed = &[
-        escrow_seed[0],
-        escrow_seed[1],
-        escrow_seed[2],
-        escrow_seed[3],
-        escrow_seed[4],
-        escrow_seed[5],
-        &[escrow_bump_seed],
-    ];
-    msg!("withdraw_token 3");
-    let transfer_from_vault = spl_token::instruction::transfer(
-        token_program_info.key,
-        &vault_info.key,
-        token_info.key,
-        &escrow_info.key,
-        &[&escrow_info.key],
-        amount,
-    )?;
-    msg!("withdraw_token 4");
-    solana_program::program::invoke_signed(
-        &transfer_from_vault,
-        &[
-            vault_info.clone(),
-            escrow_info.clone(),
-            token_info.clone(),
-            token_program_info.clone(),
-        ],
-        &[esc_seed],
-    )?;
-
-    Ok(())
-}
-
-fn create_account<'a>(
+fn create_vault<'a>(
     program_id: &Pubkey,
     vault_info: &AccountInfo<'a>,
-    mint_info: &AccountInfo<'a>,
-    account_owner_info: &AccountInfo<'a>,
+    alice_info: &AccountInfo<'a>,
+    bob_info: &AccountInfo<'a>,
+    mint_x_info: &AccountInfo<'a>,
+    mint_y_info: &AccountInfo<'a>,
     payer_info: &AccountInfo<'a>,
     token_program_info: &AccountInfo<'a>,
     rent_info: &AccountInfo<'a>,
     system_program_info: &AccountInfo<'a>,
-    vault_seed: &[&[u8]],
-    space: u64,
-) -> ProgramResult {
+    pass: [u8; 32],
+    vault_seed: &[u8],
+) -> Result<u8, ProgramError> {
+    let space = Account::LEN;
     let rent = &Rent::from_account_info(rent_info)?;
     let required_lamports = rent
-        .minimum_balance(space.try_into().unwrap())
+        .minimum_balance(space)
         .max(1)
         .saturating_sub(vault_info.lamports());
+    let seeds = &[
+        vault_seed,
+        alice_info.key.as_ref(),
+        bob_info.key.as_ref(),
+        mint_x_info.key.as_ref(),
+        mint_y_info.key.as_ref(),
+        pass.as_ref(),
+    ];
 
-
-    let (_, bump_seed) = Pubkey::find_program_address(vault_seed, program_id);
-    msg!("create_account: 4 - seed");
-    let seed = &[
-        vault_seed[0],
-        vault_seed[1],
-        vault_seed[2],
-        vault_seed[3],
-        vault_seed[4],
-        vault_seed[5],
+    let (_, bump_seed) = Pubkey::find_program_address(seeds, program_id);
+    let seeds = &[
+        vault_seed,
+        alice_info.key.as_ref(),
+        bob_info.key.as_ref(),
+        mint_x_info.key.as_ref(),
+        mint_y_info.key.as_ref(),
+        pass.as_ref(),
         &[bump_seed],
     ];
-    msg!("create_account:5 - seed {:?}", seed);
+    msg!("creeat_vault 1");
+    msg!("seeds: {:?}", seeds);
     solana_program::program::invoke_signed(
         &system_instruction::create_account(
             payer_info.key,    //from_pubkey
             vault_info.key,    //to_pubkey
             required_lamports, //lamports
-            space,             //space
+            space as u64,      //space
             token_program_info.key,
         ),
         &[
@@ -439,66 +557,8 @@ fn create_account<'a>(
             vault_info.clone(),
             system_program_info.clone(),
         ],
-        &[seed],
+        &[seeds],
     )?;
-    msg!("create_account: 6 - seed");
-    solana_program::program::invoke_signed(
-        &spl_token::instruction::initialize_account(
-            token_program_info.key,
-            vault_info.key,
-            mint_info.key,
-            account_owner_info.key,
-        )?,
-        &[
-            vault_info.clone(),
-            mint_info.clone(),
-            account_owner_info.clone(),
-            rent_info.clone(),
-            token_program_info.clone(),
-        ],
-        &[seed],
-    )?;
-    Ok(())
-}
-
-fn create_escrow_account<'a>(
-    program_id: &Pubkey,
-    escrow_info: &AccountInfo<'a>,
-    payer_info: &AccountInfo<'a>,
-    rent_info: &AccountInfo<'a>,
-    system_program_info: &AccountInfo<'a>,
-    vault_seed: &[&[u8]],
-    space: u64,
-) -> ProgramResult {
-    let rent = &Rent::from_account_info(rent_info)?;
-    let required_lamports = rent
-        .minimum_balance(space.try_into().unwrap())
-        .max(1)
-        .saturating_sub(escrow_info.lamports());
-    let (_, bump_seed) = Pubkey::find_program_address(vault_seed, program_id);
-    let seed = &[
-        vault_seed[0],
-        vault_seed[1],
-        vault_seed[2],
-        vault_seed[3],
-        vault_seed[4],
-        vault_seed[5],
-        &[bump_seed],
-    ];
-    solana_program::program::invoke_signed(
-        &system_instruction::create_account(
-            payer_info.key,    //from_pubkey
-            escrow_info.key,   //to_pubkey
-            required_lamports, //lamports
-            space,             //space
-            program_id,
-        ),
-        &[
-            payer_info.clone(),
-            escrow_info.clone(),
-            system_program_info.clone(),
-        ],
-        &[seed],
-    )?;
-    Ok(())
+    msg!("create_vault 2");
+    Ok(bump_seed)
 }

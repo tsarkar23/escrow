@@ -17,6 +17,10 @@ from solana.sysvar import SYSVAR_RENT_PUBKEY
 from struct import *
 import struct
 
+def _encode(s, pad=32):
+    r = s.encode("UTF-8")
+    r += bytes([0] * (pad - len(r)))
+    return r
 
 TOKEN_PROGRAM_ID: PublicKey = PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
 
@@ -66,32 +70,32 @@ deployed_program_key_account = solana.keypair.Keypair(json.load(open(deployed_pr
 program_id = deployed_program_key_account.public_key
 print(f"Program ID: {program_id}")
 # Seed+password for sending data
-password = (20).to_bytes(8,byteorder='little')
+password = _encode('password')
 x_seeds = [
     b"vault_x",
-    password,
     bytes(alice_pubkey),
     bytes(bob_pubkey),
     bytes(X_mint_account_address.pubkey),
     bytes(Y_mint_account_address.pubkey),
+    password,
 ]
 
 y_seeds = [
     b"vault_y",
-    password,
     bytes(alice_pubkey),
     bytes(bob_pubkey),
     bytes(X_mint_account_address.pubkey),
     bytes(Y_mint_account_address.pubkey),
+    password,
 ]
 
 escrow_seeds = [
     b"escrow",
-    password,
     bytes(alice_pubkey),
     bytes(bob_pubkey),
     bytes(X_mint_account_address.pubkey),
     bytes(Y_mint_account_address.pubkey),
+    password,
 ]
 
 # create vaults, necessary?
@@ -106,7 +110,9 @@ y_val = 15
 data = pack('<BQQ', 0,x_val,y_val)+password
 tx = Transaction()
 tx_instruction = TransactionInstruction(
-    keys=[AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
+    program_id=program_id,
+    keys=[
+          AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
           AccountMeta(pubkey=X_mint_account_address.pubkey, is_signer=False, is_writable=False),
           AccountMeta(pubkey=Y_mint_account_address.pubkey, is_signer=False, is_writable=False),
           AccountMeta(pubkey=vaultx, is_signer=False, is_writable=True),
@@ -118,7 +124,6 @@ tx_instruction = TransactionInstruction(
           AccountMeta(pubkey=SYSVAR_RENT_PUBKEY, is_signer=False, is_writable=False),
           AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
          ],
-    program_id=program_id,
     data=data,
 )
 
@@ -130,16 +135,17 @@ time.sleep(30)
 
 # Alice deposit X
 print('Alice is depositing X')
-data = pack('<B', 1)
+data = pack('<B', 1)+password
 tx = Transaction()
 tx_instruction = TransactionInstruction(
-    keys=[AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
+    program_id=program_id,
+    keys=[
+          AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
           AccountMeta(pubkey=alice_X_token_account, is_signer=False, is_writable=True), # x_a info
           AccountMeta(pubkey=vaultx, is_signer=False, is_writable=True),
           AccountMeta(pubkey=alice_pubkey, is_signer=True, is_writable=False),
           AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
          ],
-    program_id=program_id,
     data=  data,
 )
 
@@ -150,16 +156,17 @@ time.sleep(30)
 
 print('Bob is depositing Y')
 # Bob deposit Y
-data = pack('<B', 1)
+data = pack('<B', 1)+password
 tx = Transaction()
 tx_instruction = TransactionInstruction(
-    keys=[AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
+    program_id=program_id,
+    keys=[
+          AccountMeta(pubkey=escrow_address, is_signer=False, is_writable=True),
           AccountMeta(pubkey=bob_Y_token_account, is_signer=False, is_writable=True),
           AccountMeta(pubkey=vaulty, is_signer=False, is_writable=True),
           AccountMeta(pubkey=bob_pubkey, is_signer=True, is_writable=False),
           AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
          ],
-    program_id=program_id,
     data=  data,
 )
 
