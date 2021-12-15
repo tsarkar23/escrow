@@ -80,19 +80,8 @@ With these two features when the program ID signs the transaction with the seed,
 
 
 ## Escrow Program
-Each action in Solana is done by a transaction where a transaction is a sequence of instructions. An instruction consist of three components:
-- program_id: the public key of the program which the instruction wants to run
-- accounts: list of accounts metadata to be passed to instruction; this includes the public key, is_signer, and is_writable of the account
-- data: the parameters of the program. This data is the serialized version of whatever we want to pass to the program other than accounts metadata serialized into a sequence of bytes.
-    
-Note that if the program needs to read, write or execute any account, the account information should pass from the client-side information in the accounts field. Solana will not allow accessing the account if the information is sent through the data field.
 
-
-To send a transaction, the client needs to have the signature of the transaction payer and all the accounts that their sign flag is True.
-For example, if a user account wants to send some token from their token account, the signer of that account should be True, and the user should sign it with the key pair. However, sometimes the owner of an account is not a user account but a program account. So we may want a program to send tokens. Let's name the program-owned token account a vault. As you can imagine, this scenario is a bit different as the program account can not store any private key inside it (there is no hidden data in the blockchain). The other difference here is that the signature from the client-side serves two purposes, one is authentication, and the other is authorization. However, as the program rest inside the blockchain, it does not need authentication; it just needs to prove somehow the vault belongs to the program. Solana has a genuine solution for this which is Program Derived Address (PDA).
-
-
-#### States
+### States
 We use the following diagram as the states of the escrow. When it is generated for the first time it will be in the initialized state. In initialized state there are only two acceptable instructions, Alice  and Bob deposit, if the escrow receives any other instruction it will fail. After Alice/Bob sends the first deposit instruction, the state will be Deposit Alice/Bob and then after the other one sends the deposit instruction state of the machine will be commited.
 In Deposit Alice/Bob state, if Alice/Bob want can withdraw her/his token and go back to initialized state. This could happen only before the other party sends the deposit instruction. As soon as both of them sends deposit instruction, the state will be Commited. Then each party could withdraw the other party token from escrow vault account. When both withdrawed the tokens state will be Uninitialized and the initiator would be able to change the Size X/Y.
 
@@ -150,7 +139,7 @@ To start the escrow one first needs to have two accounts who want to make an exc
 
 ![](https://i.imgur.com/dsLNRO0.png)
 
-Note that all of the boxes in the above figure are [accounts](https://docs.solana.com/developing/programming-model/accounts). The blue, white, and yellow boxes are respectively user account, token account, and mint account. As mentioned before, in data field of a token account there are references to the user-space owner and also the mint account. The arrows coming out of token accounts are showing this references. Also note that the system-space owner of the token accounts and mint accounts is Token Program and the system-space owner of the user account is System Proram.
+Note that all of the boxes in the above figure are [accounts](https://docs.solana.com/developing/programming-model/accounts). The blue, white, and yellow boxes are respectively user account, token account, and mint account. As mentioned before, in data field of a token account there are references to the user-space owner and also the mint account. The arrows coming out of token accounts are showing this references. Also note that the system-space owner of the token accounts and mint accounts is Token Program and the system-space owner of the user account is System Program.
 
 
 
@@ -533,7 +522,7 @@ impl Processor {
     }
 ```
 
-In the `process_deposit` function, we start by creating accoun_info variables to store the `AccountMeta` that we passed in. We also deserialize the `data` field of `escrow_info` into `escrow_data`. At a high level, we will use information contained in `escrow_data` to check if the transaction sent is valid and update state, before re-serialize this information and store again in the escrow account.
+In the `process_deposit` function, we start by creating account_info variables to store the `AccountMeta` that we passed in. We also deserialize the `data` field of `escrow_info` into `escrow_data`. At a high level, we will use information contained in `escrow_data` to check if the transaction sent is valid and update state, before re-serialize this information and store again in the escrow account.
 
 ```rust=1
 pub fn process_deposit(
