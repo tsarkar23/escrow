@@ -51,7 +51,6 @@ def process_init(program_id, escrow_address, x_mint_pubkey,\
     tx = tx.add(tx_instruction)
     transaction_results = http_client.send_transaction(tx, *[payer_loaded_account])#, *[payer_loaded_account])
     print('Initializing Accounts Ended') 
-    time.sleep(30)   
 
 def process_deposit(program_id, escrow_address, user_token_account,\
                     vault, user_pubkey, data, http_client,\
@@ -72,8 +71,6 @@ def process_deposit(program_id, escrow_address, user_token_account,\
     tx = tx.add(tx_instruction)
     transaction_results = http_client.send_transaction(tx, *[user_keypair])
 
-    time.sleep(30)  
-
 def process_withdraw(program_id, escrow_address, user_token_account,\
                      vault, user_pubkey, data, http_client,\
                      user_keypair):
@@ -93,8 +90,6 @@ def process_withdraw(program_id, escrow_address, user_token_account,\
 
     tx = tx.add(tx_instruction)
     transaction_results = http_client.send_transaction(tx, *[user_keypair])
-    time.sleep(30)      
-
 
 def process(args):
     op_type = args.op_type
@@ -285,7 +280,7 @@ def get_parser():
     parser = argparse.ArgumentParser(description='Send Escrow Data')
 
     parser.add_argument('--payerKP', '-p', help='Payer Keypair file', default=None)
-    parser.add_argument('--http', help='http client', default='https://api.devnet.solana.com')
+    parser.add_argument('--http', help='http client', default='http://localhost:8899')
     parser.add_argument('--op_type', help='Operation Type', default='init', choices=['init', 'deposit', 'withdraw'])
     parser.add_argument('--user', help='User', default='alice', choices=['alice', 'bob'])
     parser.add_argument('--userKP', help='User Keypair file', default=None)
